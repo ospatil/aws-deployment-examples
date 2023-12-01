@@ -1,0 +1,22 @@
+{
+  "name": "aws-deployment-examples",
+  "version": "1.0.0",
+  "description": "AWS application deployment examples",
+  "private": true,
+  "keywords": [
+    "aws"
+  ],
+  "author": "Omkar Patil",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*",
+    "infra/*"
+  ],
+  "prettier": {
+    "printWidth": 100,
+    "singleQuote": true,
+    "trailingComma": "all",
+    "arrowParens": "always",
+    "semi": false
+  }
+}
