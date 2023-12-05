@@ -16,11 +16,11 @@ export default function App() {
 
   return (
     <div class="flex flex-col h-screen">
-      <header>
+      <header class="overflow-y-auto mr-auto ml-auto">
         <h1 class="text-4xl text-center pt-8 pb-4">AWS Deployment Examples</h1>
-      </header>
-      <main class="overflow-y-auto mr-auto ml-auto">
         <Logos />
+      </header>
+      <main>
         <div class="pt-16 text-center">
           <Routes>
             <Route path="/" component={Home} />
