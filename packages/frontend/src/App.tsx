@@ -2,7 +2,7 @@ import { Route, Routes } from '@solidjs/router'
 import Logos from './components/Logos'
 import Home from './pages/Home'
 import Protected from './pages/Protected'
-import { ProtectedRouteData } from './protected.data'
+import { ProtectedRouteData } from './pages/protected.data'
 
 export default function App() {
   return (
