@@ -9,8 +9,7 @@
   "author": "Omkar Patil",
   "license": "MIT",
   "workspaces": [
-    "apps/*",
-    "infra/*"
+    "packages/*"
   ],
   "prettier": {
     "printWidth": 100,

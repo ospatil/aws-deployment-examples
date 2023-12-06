@@ -1,19 +1,10 @@
 import { Route, Routes } from '@solidjs/router'
-import { createResource } from 'solid-js'
 import Logos from './components/Logos'
 import Home from './pages/Home'
 import Protected from './pages/Protected'
+import { ProtectedRouteData } from './protected.data'
 
 export default function App() {
-  const serverData = () => {
-    const apiUrl = import.meta.env.VITE_API_URL
-    const [payload] = createResource(async () => {
-      const response = await fetch(apiUrl)
-      return response.text()
-    })
-    return payload
-  }
-
   return (
     <div class="flex flex-col h-screen">
       <header class="overflow-y-auto mr-auto ml-auto">
@@ -24,7 +15,7 @@ export default function App() {
         <div class="pt-16 text-center">
           <Routes>
             <Route path="/" component={Home} />
-            <Route path="/protected" component={Protected} data={serverData} />
+            <Route path="/protected" component={Protected} data={ProtectedRouteData} />
           </Routes>
         </div>
       </main>
