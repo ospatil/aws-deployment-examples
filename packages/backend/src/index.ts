@@ -10,6 +10,11 @@ const docClient = DynamoDBDocumentClient.from(client)
 
 const app = new Hono()
 app.use('/api/*', cors())
+
+app.get('/api/healthz', (c) => {
+  return c.text('ok')
+})
+
 app.get('/api/messages', async (c) => {
   const command = new GetCommand({ TableName: 'aws-deployment-examples', Key: { msg_id: 1 } })
   const response = await docClient.send(command)
