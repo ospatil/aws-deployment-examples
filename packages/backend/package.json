@@ -1,4 +1,5 @@
 {
+  "name": "backend",
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",
     "start": "tsx src/index.ts"

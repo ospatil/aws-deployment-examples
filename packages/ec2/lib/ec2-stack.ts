@@ -119,7 +119,8 @@ export class Ec2Stack extends cdk.Stack {
     const { stdout } = execa.commandSync(cmd)
     const ipRanges = JSON.parse(stdout)
     const reqObj = ipRanges.prefixes.find(
-      (p: any) => p.service === 'EC2_INSTANCE_CONNECT' && p.region === 'ca-central-1',
+      (p: Record<string, string>) =>
+        p.service === 'EC2_INSTANCE_CONNECT' && p.region === 'ca-central-1',
     )
     const instanceConnectSg = new ec2.SecurityGroup(this, 'aws-examples-instance-connect-sg', {
       vpc,
