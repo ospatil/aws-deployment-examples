@@ -1,8 +1,11 @@
 import * as cdk from 'aws-cdk-lib'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as ec2 from 'aws-cdk-lib/aws-ec2'
+import * as iam from 'aws-cdk-lib/aws-iam'
 import { Construct } from 'constructs'
 import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
+import * as execa from 'execa'
+import { readFileSync } from 'node:fs'
 
 export class Ec2Stack extends cdk.Stack {
   dynamodbTableName = 'aws-examples-messages'
@@ -42,6 +45,11 @@ export class Ec2Stack extends cdk.Stack {
       ec2.Port.tcp(3000),
       'Allow access from ALB',
     )
+
+    this.createInstanceConnectSg(vpc)
+
+    // create launch template
+    const launchTemplate = this.createLaunchTemplate(asgSg)
   }
 
   createVpc() {
@@ -84,5 +92,46 @@ export class Ec2Stack extends cdk.Stack {
 
   addDynamoDBRecord(tableName: string, tableArn: string) {
     return new DynamoDBInsertResource(this, 'dynamodb-insert', { tableName, tableArn })
+  }
+
+  createLaunchTemplate(asgSg: cdk.aws_ec2.SecurityGroup) {
+    const userDataScript = readFileSync('./lib/user-data.sh', 'utf-8')
+
+    const role = new iam.Role(this, 'aws-examples-instance-role', {
+      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
+      managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBReadOnlyAccess')],
+    })
+
+    return new ec2.LaunchTemplate(this, 'aws-examples-launch-template', {
+      launchTemplateName: 'aws-examples-launch-template',
+      securityGroup: asgSg,
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T2, ec2.InstanceSize.MICRO),
+      machineImage: ec2.MachineImage.latestAmazonLinux2023(),
+      role: role,
+      userData: ec2.UserData.custom(userDataScript),
+    })
+  }
+
+  createInstanceConnectSg(vpc: ec2.Vpc) {
+    // get the EC2_INSTANCE_CONNECT CIDR for ca-central-1
+    // const cmd = `curl -s https://ip-ranges.amazonaws.com/ip-ranges.json | jq -r '.prefixes[] | select(.region=="ca-central-1") | select(.service=="EC2_INSTANCE_CONNECT") | .ip_prefix'`
+    const cmd = `curl -s https://ip-ranges.amazonaws.com/ip-ranges.json`
+    const { stdout } = execa.commandSync(cmd)
+    const ipRanges = JSON.parse(stdout)
+    const reqObj = ipRanges.prefixes.find(
+      (p: any) => p.service === 'EC2_INSTANCE_CONNECT' && p.region === 'ca-central-1',
+    )
+    const instanceConnectSg = new ec2.SecurityGroup(this, 'aws-examples-instance-connect-sg', {
+      vpc,
+      securityGroupName: 'aws-examples-instance-connect-sg',
+      description: 'Security group for Instance Connect',
+      allowAllOutbound: true,
+    })
+
+    instanceConnectSg.addIngressRule(
+      ec2.Peer.ipv4(reqObj.ip_prefix),
+      ec2.Port.tcp(22),
+      'Allow access from AWS console',
+    )
   }
 }
