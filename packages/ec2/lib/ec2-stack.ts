@@ -1,6 +1,8 @@
 import * as cdk from 'aws-cdk-lib'
+import * as asg from 'aws-cdk-lib/aws-autoscaling'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as ec2 from 'aws-cdk-lib/aws-ec2'
+import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import { Construct } from 'constructs'
 import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
@@ -50,6 +52,11 @@ export class Ec2Stack extends cdk.Stack {
 
     // create launch template
     const launchTemplate = this.createLaunchTemplate(asgSg)
+
+    const asg = this.createAutoScalingGroup(vpc, launchTemplate)
+
+    // create LB
+    const lb = this.createLoadBalancer(vpc, albSg, asg)
   }
 
   createVpc() {
@@ -134,5 +141,42 @@ export class Ec2Stack extends cdk.Stack {
       ec2.Port.tcp(22),
       'Allow access from AWS console',
     )
+  }
+
+  createAutoScalingGroup(vpc: ec2.Vpc, launchTemplate: cdk.aws_ec2.LaunchTemplate) {
+    return new asg.AutoScalingGroup(this, 'aws-examples-asg', {
+      vpc: vpc,
+      launchTemplate: launchTemplate,
+      minCapacity: 1,
+      maxCapacity: 1,
+      desiredCapacity: 1,
+    })
+  }
+
+  createLoadBalancer(
+    vpc: cdk.aws_ec2.Vpc,
+    albSg: cdk.aws_ec2.SecurityGroup,
+    asg: cdk.aws_autoscaling.AutoScalingGroup,
+  ) {
+    const lb = new elbv2.ApplicationLoadBalancer(this, 'aws-examples-alb', {
+      vpc,
+      internetFacing: true,
+    })
+
+    const listener = lb.addListener('aws-examples-listener', {
+      port: 80,
+    })
+
+    // Create an AutoScaling group and add it as a load balancing
+    // target to the listener.
+    listener.addTargets('aws-examples-asg', {
+      port: 3000,
+      protocol: elbv2.ApplicationProtocol.HTTP,
+      targets: [asg],
+      healthCheck: {
+        path: '/api/healthz',
+        interval: cdk.Duration.minutes(1),
+      },
+    })
   }
 }
