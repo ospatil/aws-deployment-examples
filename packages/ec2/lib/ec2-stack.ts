@@ -48,7 +48,7 @@ export class Ec2Stack extends cdk.Stack {
       'Allow access from ALB',
     )
 
-    this.createInstanceConnectSg(vpc)
+    this.createInstanceConnectEp(vpc)
 
     // create launch template
     const launchTemplate = this.createLaunchTemplate(asgSg)
@@ -119,7 +119,7 @@ export class Ec2Stack extends cdk.Stack {
     })
   }
 
-  createInstanceConnectSg(vpc: ec2.Vpc) {
+  createInstanceConnectEp(vpc: ec2.Vpc) {
     // get the EC2_INSTANCE_CONNECT CIDR for ca-central-1
     // const cmd = `curl -s https://ip-ranges.amazonaws.com/ip-ranges.json | jq -r '.prefixes[] | select(.region=="ca-central-1") | select(.service=="EC2_INSTANCE_CONNECT") | .ip_prefix'`
     const cmd = `curl -s https://ip-ranges.amazonaws.com/ip-ranges.json`
@@ -140,6 +140,15 @@ export class Ec2Stack extends cdk.Stack {
       ec2.Peer.ipv4(reqObj.ip_prefix),
       ec2.Port.tcp(22),
       'Allow access from AWS console',
+    )
+
+    const instanceConnectEndpoint = new ec2.CfnInstanceConnectEndpoint(
+      this,
+      'aws-examples-instance-connect-ep',
+      {
+        subnetId: vpc.privateSubnets[0].subnetId,
+        securityGroupIds: [instanceConnectSg.securityGroupId],
+      },
     )
   }
 

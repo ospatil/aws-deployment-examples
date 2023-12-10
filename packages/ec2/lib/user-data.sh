@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -ex
 VERSION=v20.10.0
 DISTRO=linux-x64
 NODE_DIR=/usr/local/lib/nodejs
@@ -12,7 +12,7 @@ dnf install -y git
 # install nodejs
 mkdir -p $NODE_DIR
 cd $NODE_DIR
-curl -sL https://nodejs.org/dist/$VERSION/$NODE_VERSION-DISTRO.tar.xz | tar -xz
+curl -sL https://nodejs.org/dist/$VERSION/$NODE_VERSION_DISTRO.tar.xz | tar -xz
 echo PATH=$NODE_DIR/$NODE_VERSION_DISTRO/bin:$PATH > /etc/profile.d/nodejs_path.sh
 source /etc/profile.d/nodejs_path.sh
 
