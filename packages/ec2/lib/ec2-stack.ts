@@ -48,7 +48,7 @@ export class Ec2Stack extends cdk.Stack {
       'Allow access from ALB',
     )
 
-    this.createInstanceConnectEp(vpc)
+    this.createInstanceConnectEp(vpc, asgSg)
 
     // create launch template
     const launchTemplate = this.createLaunchTemplate(asgSg)
@@ -94,6 +94,7 @@ export class Ec2Stack extends cdk.Stack {
         type: dynamodb.AttributeType.NUMBER,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
     })
   }
 
@@ -119,7 +120,7 @@ export class Ec2Stack extends cdk.Stack {
     })
   }
 
-  createInstanceConnectEp(vpc: ec2.Vpc) {
+  createInstanceConnectEp(vpc: ec2.Vpc, asgSg: ec2.SecurityGroup) {
     // get the EC2_INSTANCE_CONNECT CIDR for ca-central-1
     // const cmd = `curl -s https://ip-ranges.amazonaws.com/ip-ranges.json | jq -r '.prefixes[] | select(.region=="ca-central-1") | select(.service=="EC2_INSTANCE_CONNECT") | .ip_prefix'`
     const cmd = `curl -s https://ip-ranges.amazonaws.com/ip-ranges.json`
@@ -140,6 +141,12 @@ export class Ec2Stack extends cdk.Stack {
       ec2.Peer.ipv4(reqObj.ip_prefix),
       ec2.Port.tcp(22),
       'Allow access from AWS console',
+    )
+
+    asgSg.addIngressRule(
+      ec2.Peer.securityGroupId(instanceConnectSg.securityGroupId),
+      ec2.Port.tcp(22),
+      'Allow access from Instance Connect',
     )
 
     const instanceConnectEndpoint = new ec2.CfnInstanceConnectEndpoint(
