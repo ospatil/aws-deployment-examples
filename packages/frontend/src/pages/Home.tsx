@@ -9,10 +9,10 @@ export default function Home() {
 
   return (
     <>
-      <p class="text-2xl tracking-wide pb-4">Take a peek into the protected area</p>
+      <p class="pb-4 text-2xl tracking-wide">Take a peek into the protected area</p>
       <button
         onClick={clickHandler}
-        class="m-2 px-5 py-2 text-xl, tracking-wider ring-2 bg-neutral-600 ring-purple-500 ring-offset-4 ring-offset-slate-900"
+        class="text-xl, m-2 bg-neutral-600 px-5 py-2 tracking-wider ring-2 ring-purple-500 ring-offset-4 ring-offset-slate-900"
       >
         Let's go!
       </button>

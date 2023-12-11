@@ -6,9 +6,9 @@ import { ProtectedRouteData } from './pages/protected.data'
 
 export default function App() {
   return (
-    <div class="flex flex-col h-screen">
-      <header class="overflow-y-auto mr-auto ml-auto">
-        <h1 class="text-4xl text-center pt-8 pb-4">AWS Deployment Examples</h1>
+    <div class="flex h-screen flex-col">
+      <header class="ml-auto mr-auto overflow-y-auto">
+        <h1 class="pb-4 pt-8 text-center text-4xl">AWS Deployment Examples</h1>
         <Logos />
       </header>
       <main>
