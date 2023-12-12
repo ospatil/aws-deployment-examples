@@ -1,13 +1,19 @@
 import * as cdk from 'aws-cdk-lib'
 import * as asg from 'aws-cdk-lib/aws-autoscaling'
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
+import * as s3Origins from 'aws-cdk-lib/aws-cloudfront-origins'
 import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
 import * as ec2 from 'aws-cdk-lib/aws-ec2'
 import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2'
 import * as iam from 'aws-cdk-lib/aws-iam'
+import * as s3 from 'aws-cdk-lib/aws-s3'
+import { BucketDeployment, Source } from 'aws-cdk-lib/aws-s3-deployment'
 import { Construct } from 'constructs'
 import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
 import * as execa from 'execa'
 import { readFileSync } from 'node:fs'
+import * as path from 'node:path'
+import process from 'node:process'
 
 export class Ec2Stack extends cdk.Stack {
   dynamodbTableName = 'aws-examples-messages'
@@ -57,6 +63,10 @@ export class Ec2Stack extends cdk.Stack {
 
     // create LB
     const lb = this.createLoadBalancer(vpc, albSg, asg)
+
+    const s3Bucket = this.createStaticWebsite()
+
+    const distribution = this.createCloudFrontDistribution(s3Bucket, lb)
   }
 
   createVpc() {
@@ -102,7 +112,7 @@ export class Ec2Stack extends cdk.Stack {
     return new DynamoDBInsertResource(this, 'dynamodb-insert', { tableName, tableArn })
   }
 
-  createLaunchTemplate(asgSg: cdk.aws_ec2.SecurityGroup) {
+  createLaunchTemplate(asgSg: ec2.SecurityGroup) {
     const userDataScript = readFileSync('./lib/user-data.sh', 'utf-8')
 
     const role = new iam.Role(this, 'aws-examples-instance-role', {
@@ -159,7 +169,7 @@ export class Ec2Stack extends cdk.Stack {
     )
   }
 
-  createAutoScalingGroup(vpc: ec2.Vpc, launchTemplate: cdk.aws_ec2.LaunchTemplate) {
+  createAutoScalingGroup(vpc: ec2.Vpc, launchTemplate: ec2.LaunchTemplate) {
     return new asg.AutoScalingGroup(this, 'aws-examples-asg', {
       vpc: vpc,
       launchTemplate: launchTemplate,
@@ -169,11 +179,7 @@ export class Ec2Stack extends cdk.Stack {
     })
   }
 
-  createLoadBalancer(
-    vpc: cdk.aws_ec2.Vpc,
-    albSg: cdk.aws_ec2.SecurityGroup,
-    asg: cdk.aws_autoscaling.AutoScalingGroup,
-  ) {
+  createLoadBalancer(vpc: ec2.Vpc, albSg: ec2.SecurityGroup, asg: asg.AutoScalingGroup) {
     const lb = new elbv2.ApplicationLoadBalancer(this, 'aws-examples-alb', {
       vpc,
       internetFacing: true,
@@ -194,5 +200,84 @@ export class Ec2Stack extends cdk.Stack {
         interval: cdk.Duration.minutes(1),
       },
     })
+
+    return lb
+  }
+
+  createStaticWebsite() {
+    // create S3 bucket, upload index.html, and create CloudFront distribution
+    const s3Bucket = new s3.Bucket(this, 'aws-examples-s3-bucket', {
+      bucketName: 'aws-examples-s3-bucket',
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      accessControl: s3.BucketAccessControl.PRIVATE,
+    })
+
+    new BucketDeployment(this, 'aws-examples-s3-bucket-deployment', {
+      destinationBucket: s3Bucket,
+      sources: [Source.asset(path.resolve(process.cwd(), '../frontend/dist'))],
+    })
+
+    return s3Bucket
+  }
+
+  createCloudFrontDistribution(s3Bucket: s3.Bucket, lb: elbv2.ApplicationLoadBalancer) {
+    // the oac is not yet supported by CDK, the workaround taken from here: https://github.com/aws/aws-cdk/issues/21771#issuecomment-1479201394
+
+    const oac = new cloudfront.CfnOriginAccessControl(this, 'aws-examples-aoc', {
+      originAccessControlConfig: {
+        name: 'aws-examples-aoc',
+        originAccessControlOriginType: 's3',
+        signingBehavior: 'always',
+        signingProtocol: 'sigv4',
+      },
+    })
+
+    const distribution = new cloudfront.Distribution(this, 'Distribution', {
+      comment: 'CloudFront distribution for aws-examples',
+      defaultRootObject: 'index.html',
+      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2016,
+      defaultBehavior: {
+        origin: new s3Origins.S3Origin(s3Bucket),
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+      },
+    })
+
+    const cfnDistribution = distribution.node.defaultChild as cloudfront.CfnDistribution
+    cfnDistribution.addOverride(
+      'Properties.DistributionConfig.Origins.0.S3OriginConfig.OriginAccessIdentity',
+      '',
+    )
+    cfnDistribution.addPropertyOverride(
+      'DistributionConfig.Origins.0.OriginAccessControlId',
+      oac.getAtt('Id'),
+    )
+
+    const comS3PolicyOverride = s3Bucket.node.findChild('Policy').node
+      .defaultChild as s3.CfnBucketPolicy
+    const statement = comS3PolicyOverride.policyDocument.statements[0]
+    if (statement['_principal'] && statement['_principal'].CanonicalUser) {
+      delete statement['_principal'].CanonicalUser
+    }
+    comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.0.Principal', {
+      Service: 'cloudfront.amazonaws.com',
+    })
+    comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.0.Condition', {
+      StringEquals: {
+        'AWS:SourceArn': this.formatArn({
+          service: 'cloudfront',
+          region: '',
+          resource: 'distribution',
+          resourceName: distribution.distributionId,
+          arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
+        }),
+      },
+    })
+
+    const s3OriginNode = distribution.node.findAll().filter((child) => child.node.id === 'S3Origin')
+    s3OriginNode[0].node.tryRemoveChild('Resource')
+
+    return distribution
   }
 }
