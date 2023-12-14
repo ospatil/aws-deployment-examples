@@ -189,6 +189,8 @@ export class Ec2Stack extends cdk.Stack {
     const lb = new elbv2.ApplicationLoadBalancer(this, 'alb', {
       vpc,
       internetFacing: true,
+      loadBalancerName: 'aws-examples-alb',
+      securityGroup: albSg,
     })
 
     const listener = lb.addListener('listener', {
@@ -206,7 +208,6 @@ export class Ec2Stack extends cdk.Stack {
         interval: cdk.Duration.minutes(1),
       },
     })
-
     return lb
   }
 
@@ -216,7 +217,6 @@ export class Ec2Stack extends cdk.Stack {
       bucketName: 'aws-examples-s3-bucket',
       removalPolicy: cdk.RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
-      accessControl: s3.BucketAccessControl.PRIVATE,
     })
 
     new s3Deploy.BucketDeployment(this, 'bucket-deployment', {
@@ -237,7 +237,7 @@ export class Ec2Stack extends cdk.Stack {
         origin: new origins.S3Origin(s3Bucket),
         allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_AND_CLOUDFRONT_2022,
+        originRequestPolicy: cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN,
       },
       additionalBehaviors: {
         '/api/*': {
@@ -271,14 +271,15 @@ export class Ec2Stack extends cdk.Stack {
 
     const comS3PolicyOverride = s3Bucket.node.findChild('Policy').node
       .defaultChild as s3.CfnBucketPolicy
-    const statement = comS3PolicyOverride.policyDocument.statements[0]
+    // statements[0] is for the autodelete lambda, statements[1] was for OAI that needs to be modified
+    const statement = comS3PolicyOverride.policyDocument.statements[1]
     if (statement['_principal'] && statement['_principal'].CanonicalUser) {
       delete statement['_principal'].CanonicalUser
     }
-    comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.0.Principal', {
+    comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.1.Principal', {
       Service: 'cloudfront.amazonaws.com',
     })
-    comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.0.Condition', {
+    comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.1.Condition', {
       StringEquals: {
         'AWS:SourceArn': this.formatArn({
           service: 'cloudfront',
