@@ -1,13 +1,19 @@
-import * as cdk from 'aws-cdk-lib'
-import * as asg from 'aws-cdk-lib/aws-autoscaling'
-import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
-import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
-import * as dynamodb from 'aws-cdk-lib/aws-dynamodb'
-import * as ec2 from 'aws-cdk-lib/aws-ec2'
-import * as elbv2 from 'aws-cdk-lib/aws-elasticloadbalancingv2'
-import * as iam from 'aws-cdk-lib/aws-iam'
-import * as s3 from 'aws-cdk-lib/aws-s3'
-import * as s3Deploy from 'aws-cdk-lib/aws-s3-deployment'
+import {
+  ArnFormat,
+  Duration,
+  RemovalPolicy,
+  Stack,
+  StackProps,
+  aws_autoscaling as asg,
+  aws_cloudfront as cloudfront,
+  aws_dynamodb as dynamodb,
+  aws_ec2 as ec2,
+  aws_elasticloadbalancingv2 as elbv2,
+  aws_iam as iam,
+  aws_cloudfront_origins as origins,
+  aws_s3 as s3,
+  aws_s3_deployment as s3Deploy,
+} from 'aws-cdk-lib'
 import { Construct } from 'constructs'
 import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
 import * as execa from 'execa'
@@ -15,11 +21,11 @@ import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
 
-export class Ec2Stack extends cdk.Stack {
+export class Ec2Stack extends Stack {
   dynamodbTableName = 'aws-examples-messages'
   dynamoTablePartitionKeyName = 'id'
 
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
+  constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props)
 
     // create dynamodb table
@@ -92,7 +98,7 @@ export class Ec2Stack extends cdk.Stack {
     return albSg
   }
 
-  private createAsgSg(vpc: cdk.aws_ec2.Vpc, albSg: cdk.aws_ec2.SecurityGroup) {
+  private createAsgSg(vpc: ec2.Vpc, albSg: ec2.SecurityGroup) {
     const asgSg = new ec2.SecurityGroup(this, 'asg-sg', {
       vpc,
       securityGroupName: 'aws-examples-asg-sg',
@@ -114,7 +120,7 @@ export class Ec2Stack extends cdk.Stack {
         type: dynamodb.AttributeType.NUMBER,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: RemovalPolicy.DESTROY,
     })
   }
 
@@ -205,7 +211,7 @@ export class Ec2Stack extends cdk.Stack {
       targets: [asg],
       healthCheck: {
         path: '/api/healthz',
-        interval: cdk.Duration.minutes(1),
+        interval: Duration.minutes(1),
       },
     })
     return lb
@@ -215,7 +221,7 @@ export class Ec2Stack extends cdk.Stack {
     // create S3 bucket, upload index.html, and create CloudFront distribution
     const s3Bucket = new s3.Bucket(this, 'bucket', {
       bucketName: 'aws-examples-s3-bucket',
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
+      removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
     })
 
@@ -286,7 +292,7 @@ export class Ec2Stack extends cdk.Stack {
           region: '',
           resource: 'distribution',
           resourceName: distribution.distributionId,
-          arnFormat: cdk.ArnFormat.SLASH_RESOURCE_NAME,
+          arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
         }),
       },
     })
