@@ -297,7 +297,7 @@ export class Ec2Stack extends Stack {
       },
     })
 
-    const s3OriginNode = distribution.node.findAll().filter((child) => child.node.id === 'S3Origin')
+    const s3OriginNode = distribution.node.findAll().filter(child => child.node.id === 'S3Origin')
     s3OriginNode[0].node.tryRemoveChild('Resource')
 
     return distribution
