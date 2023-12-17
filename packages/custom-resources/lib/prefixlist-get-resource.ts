@@ -3,11 +3,11 @@ import { Duration } from 'aws-cdk-lib'
 import {
   AwsCustomResource,
   AwsCustomResourcePolicy,
-  AwsSdkCall,
+  type AwsSdkCall,
 } from 'aws-cdk-lib/custom-resources'
 import { Construct } from 'constructs'
 
-export interface PrefixListGetResourceProps {
+export type PrefixListGetResourceProps = {
   name?: string
 }
 
@@ -20,7 +20,7 @@ export class PrefixListGetResource extends Construct {
       props?.name || 'com.amazonaws.global.cloudfront.origin-facing',
     )
     this.prefixListId = prefixLs.getResponseField('PrefixLists.0.PrefixListId')
-    new cdk.CfnOutput(this, 'prefixListId', {
+    const prefixListOutput = new cdk.CfnOutput(this, 'prefixListId', {
       key: 'cloudfrontPrefixListId',
       value: this.prefixListId,
       exportName: 'cloudfrontPrefixListId',

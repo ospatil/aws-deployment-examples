@@ -11,13 +11,14 @@ const docClient = DynamoDBDocumentClient.from(client)
 const app = new Hono()
 app.use('/api/*', cors())
 
-app.get('/api/healthz', (c) => {
+app.get('/api/healthz', c => {
   return c.text('ok')
 })
 
-app.get('/api/messages', async (c) => {
+app.get('/api/messages', async c => {
   const command = new GetCommand({ TableName: 'aws-deployment-examples', Key: { msg_id: 1 } })
   const response = await docClient.send(command)
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
   return c.text(response?.Item?.msg || 'Hello World!')
 })
 

@@ -1,6 +1,6 @@
 import { useRouteData } from '@solidjs/router'
 import { Show } from 'solid-js'
-import { ProtectedRouteData } from './protected.data'
+import { type ProtectedRouteData } from './protected.data'
 
 export default function Protected() {
   const data = useRouteData<typeof ProtectedRouteData>()

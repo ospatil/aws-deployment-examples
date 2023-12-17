@@ -3,12 +3,12 @@ import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam'
 import {
   AwsCustomResource,
   AwsCustomResourcePolicy,
-  AwsSdkCall,
+  type AwsSdkCall,
   PhysicalResourceId,
 } from 'aws-cdk-lib/custom-resources'
 import { Construct } from 'constructs'
 
-export interface DynamoDBInsertResourceProps {
+export type DynamoDBInsertResourceProps = {
   tableName: string
   tableArn: string
 }

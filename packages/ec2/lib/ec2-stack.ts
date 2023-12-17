@@ -3,7 +3,6 @@ import {
   Duration,
   RemovalPolicy,
   Stack,
-  StackProps,
   aws_autoscaling as asg,
   aws_cloudfront as cloudfront,
   aws_dynamodb as dynamodb,
@@ -13,13 +12,15 @@ import {
   aws_cloudfront_origins as origins,
   aws_s3 as s3,
   aws_s3_deployment as s3Deploy,
+  type StackProps,
 } from 'aws-cdk-lib'
-import { Construct } from 'constructs'
-import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
-import * as execa from 'execa'
+import { type Construct } from 'constructs'
 import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
+// eslint-disable-next-line import/no-extraneous-dependencies
+import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
+import * as execa from 'execa'
 
 export class Ec2Stack extends Stack {
   dynamodbTableName = 'aws-examples-messages'
@@ -129,7 +130,7 @@ export class Ec2Stack extends Stack {
   }
 
   private createLaunchTemplate(asgSg: ec2.SecurityGroup) {
-    const userDataScript = readFileSync('./lib/user-data.sh', 'utf-8')
+    const userDataScript = readFileSync('./lib/user-data.sh', 'utf8')
 
     const role = new iam.Role(this, 'instance-role', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
@@ -141,7 +142,7 @@ export class Ec2Stack extends Stack {
       securityGroup: asgSg,
       instanceType: ec2.InstanceType.of(ec2.InstanceClass.T2, ec2.InstanceSize.MICRO),
       machineImage: ec2.MachineImage.latestAmazonLinux2023(),
-      role: role,
+      role,
       userData: ec2.UserData.custom(userDataScript),
     })
   }
@@ -150,9 +151,14 @@ export class Ec2Stack extends Stack {
     // get the EC2_INSTANCE_CONNECT CIDR for ca-central-1
     // const cmd = `curl -s https://ip-ranges.amazonaws.com/ip-ranges.json | jq -r '.prefixes[] | select(.region=="ca-central-1") | select(.service=="EC2_INSTANCE_CONNECT") | .ip_prefix'`
     const cmd = `curl -s https://ip-ranges.amazonaws.com/ip-ranges.json`
+
+    type IpRange = {
+      prefixes: Array<{ service: string; region: string; ip_prefix: string }>
+    }
     const { stdout } = execa.commandSync(cmd)
-    const ipRanges = JSON.parse(stdout)
-    const reqObj = ipRanges.prefixes.find(
+    const ipRanges: IpRange = JSON.parse(stdout) as IpRange
+    // const ipRanges = JSON.parse(stdout)
+    const requestObject = ipRanges.prefixes.find(
       (p: Record<string, string>) =>
         p.service === 'EC2_INSTANCE_CONNECT' && p.region === 'ca-central-1',
     )
@@ -163,11 +169,13 @@ export class Ec2Stack extends Stack {
       allowAllOutbound: true,
     })
 
-    instanceConnectSg.addIngressRule(
-      ec2.Peer.ipv4(reqObj.ip_prefix),
-      ec2.Port.tcp(22),
-      'Allow access from AWS console',
-    )
+    if (requestObject) {
+      instanceConnectSg.addIngressRule(
+        ec2.Peer.ipv4(requestObject.ip_prefix),
+        ec2.Port.tcp(22),
+        'Allow access from AWS console',
+      )
+    }
 
     asgSg.addIngressRule(
       ec2.Peer.securityGroupId(instanceConnectSg.securityGroupId),
@@ -183,8 +191,8 @@ export class Ec2Stack extends Stack {
 
   private createAutoScalingGroup(vpc: ec2.Vpc, launchTemplate: ec2.LaunchTemplate) {
     return new asg.AutoScalingGroup(this, 'asg', {
-      vpc: vpc,
-      launchTemplate: launchTemplate,
+      vpc,
+      launchTemplate,
       minCapacity: 1,
       maxCapacity: 1,
       desiredCapacity: 1,
@@ -203,7 +211,7 @@ export class Ec2Stack extends Stack {
       port: 80,
     })
 
-    // Create an AutoScaling group and add it as a load balancing
+    // create an AutoScaling group and add it as a load balancing
     // target to the listener.
     listener.addTargets('asg-target', {
       port: 3000,
@@ -225,7 +233,7 @@ export class Ec2Stack extends Stack {
       autoDeleteObjects: true,
     })
 
-    new s3Deploy.BucketDeployment(this, 'bucket-deployment', {
+    const depl = new s3Deploy.BucketDeployment(this, 'bucket-deployment', {
       destinationBucket: s3Bucket,
       sources: [s3Deploy.Source.asset(path.resolve(process.cwd(), '../frontend/dist'))],
     })
@@ -255,7 +263,7 @@ export class Ec2Stack extends Stack {
       },
     })
 
-    // the oac is not yet supported by CDK, the workaround taken from here: https://github.com/aws/aws-cdk/issues/21771#issuecomment-1479201394
+    // the oac is not yet supported by CDK, the workaround adopted from: https://github.com/aws/aws-cdk/issues/21771#issuecomment-1479201394
     const oac = new cloudfront.CfnOriginAccessControl(this, 'cf-oac', {
       originAccessControlConfig: {
         name: 'aws-examples-aoc',
@@ -278,10 +286,12 @@ export class Ec2Stack extends Stack {
     const comS3PolicyOverride = s3Bucket.node.findChild('Policy').node
       .defaultChild as s3.CfnBucketPolicy
     // statements[0] is for the autodelete lambda, statements[1] was for OAI that needs to be modified
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
     const statement = comS3PolicyOverride.policyDocument.statements[1]
-    if (statement['_principal'] && statement['_principal'].CanonicalUser) {
-      delete statement['_principal'].CanonicalUser
+    if (statement._principal?.CanonicalUser) {
+      delete statement._principal.CanonicalUser
     }
+
     comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.1.Principal', {
       Service: 'cloudfront.amazonaws.com',
     })
@@ -297,8 +307,8 @@ export class Ec2Stack extends Stack {
       },
     })
 
-    const s3OriginNode = distribution.node.findAll().filter(child => child.node.id === 'S3Origin')
-    s3OriginNode[0].node.tryRemoveChild('Resource')
+    const s3OriginNode = distribution.node.findAll().find(child => child.node.id === 'S3Origin')
+    s3OriginNode?.node.tryRemoveChild('Resource')
 
     return distribution
   }

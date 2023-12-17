@@ -4,7 +4,7 @@ import 'source-map-support/register'
 import { Ec2Stack } from '../lib/ec2-stack'
 
 const app = new cdk.App()
-new Ec2Stack(app, 'Ec2Stack', {
+const ec2Stack = new Ec2Stack(app, 'Ec2Stack', {
   /* If you don't specify 'env', this stack will be environment-agnostic.
    * Account/Region-dependent features and context lookups will not work,
    * but a single synthesized template can be deployed anywhere. */
