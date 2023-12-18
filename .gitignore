@@ -205,6 +205,7 @@ dist
 yalc.lock
 
 *.drawio.bkp
+*.drawio.dtmp
 
 # ignore the cdk synth files
 temp*.yml
