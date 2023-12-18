@@ -1,5 +1,5 @@
-import * as cdk from 'aws-cdk-lib'
-import { Duration } from 'aws-cdk-lib'
+import { Duration, aws_ec2 as ec2 } from 'aws-cdk-lib'
+import { RetentionDays } from 'aws-cdk-lib/aws-logs'
 import {
   AwsCustomResource,
   AwsCustomResourcePolicy,
@@ -8,26 +8,23 @@ import {
 import { Construct } from 'constructs'
 
 export type PrefixListGetResourceProps = {
+  vpc: ec2.Vpc
   name?: string
 }
 
 export class PrefixListGetResource extends Construct {
-  prefixListId: string
-  constructor(scope: Construct, id: string, props: PrefixListGetResourceProps = {}) {
+  public readonly prefixListId: string
+  constructor(scope: Construct, id: string, props: PrefixListGetResourceProps) {
     super(scope, id)
     // use cloudfront prefix list as default
     const prefixLs = this.getPrefixList(
-      props?.name || 'com.amazonaws.global.cloudfront.origin-facing',
+      props.name ?? 'com.amazonaws.global.cloudfront.origin-facing',
+      props,
     )
     this.prefixListId = prefixLs.getResponseField('PrefixLists.0.PrefixListId')
-    const prefixListOutput = new cdk.CfnOutput(this, 'prefixListId', {
-      key: 'cloudfrontPrefixListId',
-      value: this.prefixListId,
-      exportName: 'cloudfrontPrefixListId',
-    })
   }
 
-  getPrefixList(name: string) {
+  getPrefixList(name: string, props: PrefixListGetResourceProps) {
     const awsSdkCall: AwsSdkCall = {
       service: '@aws-sdk/client-ec2',
       action: 'DescribeManagedPrefixLists',
@@ -48,7 +45,9 @@ export class PrefixListGetResource extends Construct {
         resources: AwsCustomResourcePolicy.ANY_RESOURCE,
       }),
       timeout: Duration.minutes(5),
-      logRetention: 1,
+      logRetention: RetentionDays.ONE_DAY,
+      vpc: props.vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
     })
   }
 }

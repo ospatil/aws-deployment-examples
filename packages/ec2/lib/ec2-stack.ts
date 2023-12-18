@@ -23,19 +23,18 @@ import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
 import * as execa from 'execa'
 
 export class Ec2Stack extends Stack {
-  dynamodbTableName = 'aws-examples-messages'
-  dynamoTablePartitionKeyName = 'id'
+  readonly #dynamodbTableName = 'aws-examples-messages'
+  readonly #dynamoTablePartitionKeyName = 'id'
 
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props)
+    const vpc = this.createVpc()
 
     // create dynamodb table
     const dynamodbTable = this.createDynamodb()
-    this.addDynamoDBRecord(this.dynamodbTableName, dynamodbTable.tableArn)
+    this.addDynamoDBRecord(this.#dynamodbTableName, dynamodbTable.tableArn, vpc)
 
-    const prefixList = new PrefixListGetResource(this, 'prefixlist')
-
-    const vpc = this.createVpc()
+    const prefixList = new PrefixListGetResource(this, 'prefixlist', { vpc })
 
     // create SG for LB
     const albSg = this.createAlbSg(vpc, prefixList)
@@ -114,10 +113,10 @@ export class Ec2Stack extends Stack {
   }
 
   private createDynamodb() {
-    return new dynamodb.Table(this, this.dynamodbTableName, {
-      tableName: this.dynamodbTableName,
+    return new dynamodb.Table(this, this.#dynamodbTableName, {
+      tableName: this.#dynamodbTableName,
       partitionKey: {
-        name: this.dynamoTablePartitionKeyName,
+        name: this.#dynamoTablePartitionKeyName,
         type: dynamodb.AttributeType.NUMBER,
       },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -125,8 +124,8 @@ export class Ec2Stack extends Stack {
     })
   }
 
-  private addDynamoDBRecord(tableName: string, tableArn: string) {
-    return new DynamoDBInsertResource(this, 'dynamodb-insert', { tableName, tableArn })
+  private addDynamoDBRecord(tableName: string, tableArn: string, vpc: ec2.Vpc) {
+    return new DynamoDBInsertResource(this, 'dynamodb-insert', { tableName, tableArn, vpc })
   }
 
   private createLaunchTemplate(asgSg: ec2.SecurityGroup) {
