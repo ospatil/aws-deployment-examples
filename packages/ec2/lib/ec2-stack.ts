@@ -12,6 +12,7 @@ import {
   aws_cloudfront_origins as origins,
   aws_s3 as s3,
   aws_s3_deployment as s3Deploy,
+  aws_secretsmanager as secretsmanager,
   type StackProps,
 } from 'aws-cdk-lib'
 import { type Construct } from 'constructs'
@@ -23,6 +24,7 @@ import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
 import * as execa from 'execa'
 
 export class Ec2Stack extends Stack {
+  public readonly customHeaderSecret: secretsmanager.Secret
   readonly #dynamodbTableName = 'aws-examples-messages'
   readonly #dynamoTablePartitionKeyName = 'id'
 
@@ -35,6 +37,8 @@ export class Ec2Stack extends Stack {
     this.addDynamoDBRecord(this.#dynamodbTableName, dynamodbTable.tableArn, vpc)
 
     const prefixList = new PrefixListGetResource(this, 'prefixlist', { vpc })
+
+    this.customHeaderSecret = this.createCustomHeaderSecret()
 
     // create SG for LB
     const albSg = this.createAlbSg(vpc, prefixList)
@@ -81,6 +85,22 @@ export class Ec2Stack extends Stack {
           subnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
         },
       },
+    })
+  }
+
+  private createCustomHeaderSecret() {
+    return new secretsmanager.Secret(this, 'custom-header-secret', {
+      secretName: 'aws-examples-custom-header-secret',
+      generateSecretString: {
+        // exclude special characters to avoid escaping in the shell
+        excludeCharacters: '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
+        excludePunctuation: true,
+        includeSpace: false,
+        passwordLength: 32,
+        requireEachIncludedType: true,
+      },
+      removalPolicy: RemovalPolicy.DESTROY,
+      replicaRegions: [{ region: 'us-east-1' }],
     })
   }
 
