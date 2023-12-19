@@ -1,12 +1,10 @@
-import { Duration, aws_ec2 as ec2 } from 'aws-cdk-lib'
-import { Effect, PolicyStatement } from 'aws-cdk-lib/aws-iam'
-import { RetentionDays } from 'aws-cdk-lib/aws-logs'
 import {
-  AwsCustomResource,
-  AwsCustomResourcePolicy,
-  PhysicalResourceId,
-  type AwsSdkCall,
-} from 'aws-cdk-lib/custom-resources'
+  Duration,
+  custom_resources as cr,
+  aws_ec2 as ec2,
+  aws_iam as iam,
+  aws_logs as logs,
+} from 'aws-cdk-lib'
 import { Construct } from 'constructs'
 
 export type DynamoDBInsertResourceProps = {
@@ -26,36 +24,32 @@ export class DynamoDBInsertResource extends Construct {
   }
 
   insertRecord(props: DynamoDBInsertResourceProps, item: unknown) {
-    const awsSdkCall: AwsSdkCall = {
+    const awsSdkCall: cr.AwsSdkCall = {
       // service: 'DynamoDB',
-      service: '@aws-sdk/client-dynamodb',
+      service: 'dynamodb',
       action: 'putItem',
-      physicalResourceId: PhysicalResourceId.of(props.tableName + '_insert'),
+      physicalResourceId: cr.PhysicalResourceId.of(props.tableName + '_insert'),
       parameters: {
         TableName: props.tableName,
         Item: item,
       },
     }
 
-    const customResource: AwsCustomResource = new AwsCustomResource(
-      this,
-      props.tableName + '_custom_resource',
-      {
-        onCreate: awsSdkCall,
-        onUpdate: awsSdkCall,
-        policy: AwsCustomResourcePolicy.fromStatements([
-          new PolicyStatement({
-            sid: 'DynamoWriteAccess',
-            effect: Effect.ALLOW,
-            actions: ['dynamodb:PutItem'],
-            resources: [props.tableArn],
-          }),
-        ]),
-        logRetention: RetentionDays.ONE_DAY,
-        timeout: Duration.minutes(5),
-        vpc: props.vpc,
-        vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
-      },
-    )
+    const customResource = new cr.AwsCustomResource(this, props.tableName + '_custom_resource', {
+      onCreate: awsSdkCall,
+      onUpdate: awsSdkCall,
+      policy: cr.AwsCustomResourcePolicy.fromStatements([
+        new iam.PolicyStatement({
+          sid: 'DynamoWriteAccess',
+          effect: iam.Effect.ALLOW,
+          actions: ['dynamodb:PutItem'],
+          resources: [props.tableArn],
+        }),
+      ]),
+      logRetention: logs.RetentionDays.ONE_DAY,
+      timeout: Duration.minutes(1),
+      vpc: props.vpc,
+      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
+    })
   }
 }

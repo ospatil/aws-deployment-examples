@@ -1,10 +1,4 @@
-import { Duration, aws_ec2 as ec2 } from 'aws-cdk-lib'
-import { RetentionDays } from 'aws-cdk-lib/aws-logs'
-import {
-  AwsCustomResource,
-  AwsCustomResourcePolicy,
-  type AwsSdkCall,
-} from 'aws-cdk-lib/custom-resources'
+import { Duration, custom_resources as cr, aws_ec2 as ec2, aws_logs as logs } from 'aws-cdk-lib'
 import { Construct } from 'constructs'
 
 export type PrefixListGetResourceProps = {
@@ -25,8 +19,8 @@ export class PrefixListGetResource extends Construct {
   }
 
   getPrefixList(name: string, props: PrefixListGetResourceProps) {
-    const awsSdkCall: AwsSdkCall = {
-      service: '@aws-sdk/client-ec2',
+    const awsSdkCall: cr.AwsSdkCall = {
+      service: 'ec2',
       action: 'DescribeManagedPrefixLists',
       physicalResourceId: {},
       parameters: {
@@ -39,13 +33,13 @@ export class PrefixListGetResource extends Construct {
       },
     }
 
-    return new AwsCustomResource(this, 'prefixlist_custom_resource', {
+    return new cr.AwsCustomResource(this, 'prefixlist_custom_resource', {
       onUpdate: awsSdkCall,
-      policy: AwsCustomResourcePolicy.fromSdkCalls({
-        resources: AwsCustomResourcePolicy.ANY_RESOURCE,
+      policy: cr.AwsCustomResourcePolicy.fromSdkCalls({
+        resources: cr.AwsCustomResourcePolicy.ANY_RESOURCE,
       }),
-      timeout: Duration.minutes(5),
-      logRetention: RetentionDays.ONE_DAY,
+      timeout: Duration.minutes(1),
+      logRetention: logs.RetentionDays.ONE_DAY,
       vpc: props.vpc,
       vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
     })
