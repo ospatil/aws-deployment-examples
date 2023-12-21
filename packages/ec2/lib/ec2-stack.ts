@@ -1,30 +1,31 @@
 import {
-  ArnFormat,
   Duration,
   RemovalPolicy,
   Stack,
+  StackProps,
+  aws_certificatemanager as acm,
   aws_autoscaling as asg,
-  aws_cloudfront as cloudfront,
   aws_dynamodb as dynamodb,
   aws_ec2 as ec2,
   aws_elasticloadbalancingv2 as elbv2,
   aws_iam as iam,
-  aws_cloudfront_origins as origins,
   aws_s3 as s3,
   aws_s3_deployment as s3Deploy,
   aws_secretsmanager as secretsmanager,
-  type StackProps,
 } from 'aws-cdk-lib'
-import { type Construct } from 'constructs'
+import { Construct } from 'constructs'
 import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
 import * as execa from 'execa'
+import { createCertificate } from './utils'
 
 export class Ec2Stack extends Stack {
   public readonly customHeaderSecret: secretsmanager.Secret
+  public readonly s3Bucket: s3.Bucket
+  public readonly lb: elbv2.ApplicationLoadBalancer
   readonly #dynamodbTableName = 'aws-examples-messages'
   readonly #dynamoTablePartitionKeyName = 'id'
 
@@ -53,12 +54,12 @@ export class Ec2Stack extends Stack {
 
     const asg = this.createAutoScalingGroup(vpc, launchTemplate)
 
+    const certificate = createCertificate(this, 'alb-cert')
+
     // create LB
-    const lb = this.createLoadBalancer(vpc, albSg, asg)
+    this.lb = this.createLoadBalancer(vpc, albSg, asg, certificate)
 
-    const s3Bucket = this.createStaticWebsite()
-
-    const distribution = this.createCloudFrontDistribution(s3Bucket, lb)
+    this.s3Bucket = this.createStaticWebsite()
   }
 
   private createVpc() {
@@ -218,7 +219,12 @@ export class Ec2Stack extends Stack {
     })
   }
 
-  private createLoadBalancer(vpc: ec2.Vpc, albSg: ec2.SecurityGroup, asg: asg.AutoScalingGroup) {
+  private createLoadBalancer(
+    vpc: ec2.Vpc,
+    albSg: ec2.SecurityGroup,
+    asg: asg.AutoScalingGroup,
+    certificate: acm.ICertificate,
+  ) {
     const lb = new elbv2.ApplicationLoadBalancer(this, 'alb', {
       vpc,
       internetFacing: true,
@@ -227,7 +233,8 @@ export class Ec2Stack extends Stack {
     })
 
     const listener = lb.addListener('listener', {
-      port: 80,
+      port: 443,
+      certificates: [elbv2.ListenerCertificate.fromCertificateManager(certificate)],
     })
 
     // create an AutoScaling group and add it as a load balancing
@@ -258,77 +265,5 @@ export class Ec2Stack extends Stack {
     })
 
     return s3Bucket
-  }
-
-  private createCloudFrontDistribution(s3Bucket: s3.Bucket, lb: elbv2.ApplicationLoadBalancer) {
-    const distribution = new cloudfront.Distribution(this, 'distribution', {
-      comment: 'CloudFront distribution for aws-examples',
-      defaultRootObject: 'index.html',
-      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
-      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2016,
-      defaultBehavior: {
-        origin: new origins.S3Origin(s3Bucket),
-        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
-        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-        originRequestPolicy: cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN,
-      },
-      additionalBehaviors: {
-        '/api/*': {
-          origin: new origins.LoadBalancerV2Origin(lb),
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_AND_CLOUDFRONT_2022,
-        },
-      },
-    })
-
-    // the oac is not yet supported by CDK, the workaround adopted from: https://github.com/aws/aws-cdk/issues/21771#issuecomment-1479201394
-    const oac = new cloudfront.CfnOriginAccessControl(this, 'cf-oac', {
-      originAccessControlConfig: {
-        name: 'aws-examples-aoc',
-        originAccessControlOriginType: 's3',
-        signingBehavior: 'always',
-        signingProtocol: 'sigv4',
-      },
-    })
-
-    const cfnDistribution = distribution.node.defaultChild as cloudfront.CfnDistribution
-    cfnDistribution.addOverride(
-      'Properties.DistributionConfig.Origins.0.S3OriginConfig.OriginAccessIdentity',
-      '',
-    )
-    cfnDistribution.addPropertyOverride(
-      'DistributionConfig.Origins.0.OriginAccessControlId',
-      oac.getAtt('Id'),
-    )
-
-    const comS3PolicyOverride = s3Bucket.node.findChild('Policy').node
-      .defaultChild as s3.CfnBucketPolicy
-    // statements[0] is for the autodelete lambda, statements[1] was for OAI that needs to be modified
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-    const statement = comS3PolicyOverride.policyDocument.statements[1]
-    if (statement._principal?.CanonicalUser) {
-      delete statement._principal.CanonicalUser
-    }
-
-    comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.1.Principal', {
-      Service: 'cloudfront.amazonaws.com',
-    })
-    comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.1.Condition', {
-      StringEquals: {
-        'AWS:SourceArn': this.formatArn({
-          service: 'cloudfront',
-          region: '',
-          resource: 'distribution',
-          resourceName: distribution.distributionId,
-          arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
-        }),
-      },
-    })
-
-    const s3OriginNode = distribution.node.findAll().find(child => child.node.id === 'S3Origin')
-    s3OriginNode?.node.tryRemoveChild('Resource')
-
-    return distribution
   }
 }
