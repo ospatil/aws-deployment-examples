@@ -1,0 +1,4 @@
+CLOUDFLARE_API_TOKEN=<TOKEN>
+CLOUDFLARE_ZONE_NAME=example.com
+AWS_DNS_ZONE_NAME=my.example.com
+APP_DOMAIN=app.my.example.com

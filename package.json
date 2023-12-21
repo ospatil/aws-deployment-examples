@@ -11,6 +11,9 @@
   "workspaces": [
     "packages/*"
   ],
+  "scripts": {
+    "delegate-subdomain": ". ./scripts/delegate-subdomain.sh"
+  },
   "devDependencies": {
     "prettier": "^3.1.1",
     "prettier-plugin-organize-imports": "^3.2.4",
@@ -41,6 +44,12 @@
       "@typescript-eslint/class-literal-property-style": [
         "error",
         "fields"
+      ],
+      "@typescript-eslint/consistent-type-imports": [
+        "error",
+        {
+          "prefer": "no-type-imports"
+        }
       ]
     }
   }
