@@ -4,11 +4,13 @@ import { serve } from '@hono/node-server'
 import { Hono } from 'hono'
 import { getRuntimeKey } from 'hono/adapter'
 import { cors } from 'hono/cors'
+import { logger } from 'hono/logger'
 
 const client = new DynamoDBClient()
 const docClient = DynamoDBDocumentClient.from(client)
 
 const app = new Hono()
+app.use('*', logger())
 app.use('/api/*', cors())
 
 app.get('/api/healthz', c => {

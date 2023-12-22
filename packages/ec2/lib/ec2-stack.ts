@@ -162,9 +162,27 @@ export class Ec2Stack extends Stack {
   private createLaunchTemplate(asgSg: ec2.SecurityGroup) {
     const userDataScript = readFileSync('./lib/user-data.sh', 'utf8')
 
+    const policy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'logs:CreateLogGroup',
+            'logs:CreateLogStream',
+            'logs:PutLogEvents',
+            'logs:DescribeLogStreams',
+          ],
+          resources: ['*'],
+        }),
+      ],
+    })
+
     const role = new iam.Role(this, 'instance-role', {
       assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
       managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBReadOnlyAccess')],
+      inlinePolicies: {
+        cloudwatchLogsPolicy: policy,
+      },
     })
 
     return new ec2.LaunchTemplate(this, 'launch-template', {
@@ -259,7 +277,7 @@ export class Ec2Stack extends Stack {
     })
 
     // add default action to check for custom header and then forward to asg target group
-    listener.addAction('default-action', {
+    listener.addAction('DefaultAction', {
       priority: 1,
       conditions: [
         elbv2.ListenerCondition.httpHeader(customHeaderName, [

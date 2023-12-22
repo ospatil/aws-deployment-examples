@@ -2,7 +2,7 @@
   "name": "backend",
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/index.ts",
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts > app.log 2>&1 &"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.465.0",
