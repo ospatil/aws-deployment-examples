@@ -10,3 +10,5 @@ export function createCertificate(stack: Stack, id: string) {
     validation: acm.CertificateValidation.fromDns(hostedZone),
   })
 }
+
+export const customHeaderName = 'x-verify-code'

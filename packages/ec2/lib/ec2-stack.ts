@@ -25,14 +25,13 @@ import process from 'node:process'
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
 import * as execa from 'execa'
-import { createCertificate } from './utils'
+import { createCertificate, customHeaderName } from './commons'
 
 export type Ec2StackProps = StackProps & {
   cloudfrontCertificate: acm.ICertificate
 }
 
 export class Ec2Stack extends Stack {
-  public readonly customHeaderSecret: secretsmanager.Secret
   readonly #dynamodbTableName = 'aws-examples-messages'
   readonly #dynamoTablePartitionKeyName = 'id'
 
@@ -46,35 +45,47 @@ export class Ec2Stack extends Stack {
 
     const prefixList = new PrefixListGetResource(this, 'prefixlist', { vpc })
 
-    this.customHeaderSecret = this.createCustomHeaderSecret()
+    const customHeaderSecret = this.createCustomHeaderSecret()
 
-    // create SG for LB
     const albSg = this.createAlbSg(vpc, prefixList)
 
-    // create SG for ASG
     const asgSg = this.createAsgSg(vpc, albSg)
 
     const instanceConnectEp = this.createInstanceConnectEp(vpc, asgSg)
 
-    // create launch template
     const launchTemplate = this.createLaunchTemplate(asgSg)
 
     const asg = this.createAutoScalingGroup(vpc, launchTemplate)
 
     const certificate = createCertificate(this, 'alb-cert')
 
-    // create LB
-    const lb = this.createLoadBalancer(vpc, albSg, asg, certificate)
+    const lb = this.createLoadBalancer(vpc, albSg, asg, certificate, customHeaderSecret)
 
     const s3Bucket = this.createStaticWebsite()
 
     const distribution = this.createCloudFrontDistribution(
       s3Bucket,
       lb,
+      customHeaderSecret,
       props.cloudfrontCertificate,
     )
 
     const route53DistAlias = this.createRoute53DistAlias(distribution)
+  }
+
+  private createCustomHeaderSecret() {
+    return new secretsmanager.Secret(this, 'custom-header-secret', {
+      secretName: 'aws-examples-custom-header-secret',
+      generateSecretString: {
+        // exclude special characters to avoid escaping in the shell
+        excludeCharacters: '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
+        excludePunctuation: true,
+        includeSpace: false,
+        passwordLength: 32,
+        requireEachIncludedType: true,
+      },
+      removalPolicy: RemovalPolicy.DESTROY,
+    })
   }
 
   private createVpc() {
@@ -101,22 +112,6 @@ export class Ec2Stack extends Stack {
           subnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
         },
       },
-    })
-  }
-
-  private createCustomHeaderSecret() {
-    return new secretsmanager.Secret(this, 'custom-header-secret', {
-      secretName: 'aws-examples-custom-header-secret',
-      generateSecretString: {
-        // exclude special characters to avoid escaping in the shell
-        excludeCharacters: '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
-        excludePunctuation: true,
-        includeSpace: false,
-        passwordLength: 32,
-        requireEachIncludedType: true,
-      },
-      removalPolicy: RemovalPolicy.DESTROY,
-      replicaRegions: [{ region: 'us-east-1' }],
     })
   }
 
@@ -195,7 +190,7 @@ export class Ec2Stack extends Stack {
     // const ipRanges = JSON.parse(stdout)
     const requestObject = ipRanges.prefixes.find(
       (p: Record<string, string>) =>
-        p.service === 'EC2_INSTANCE_CONNECT' && p.region === 'ca-central-1',
+        p.service === 'EC2_INSTANCE_CONNECT' && p.region === process.env.AWS_PRIMARY_REGION,
     )
     const instanceConnectSg = new ec2.SecurityGroup(this, 'instance-connect-sg', {
       vpc,
@@ -239,6 +234,7 @@ export class Ec2Stack extends Stack {
     albSg: ec2.SecurityGroup,
     asg: asg.AutoScalingGroup,
     certificate: acm.ICertificate,
+    customHeaderSecret: secretsmanager.ISecret,
   ) {
     const lb = new elbv2.ApplicationLoadBalancer(this, 'alb', {
       vpc,
@@ -252,9 +248,7 @@ export class Ec2Stack extends Stack {
       certificates: [elbv2.ListenerCertificate.fromCertificateManager(certificate)],
     })
 
-    // create an AutoScaling group and add it as a load balancing
-    // target to the listener.
-    listener.addTargets('asg-target', {
+    const tg = listener.addTargets('asg-target', {
       port: 3000,
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [asg],
@@ -262,6 +256,17 @@ export class Ec2Stack extends Stack {
         path: '/api/healthz',
         interval: Duration.minutes(1),
       },
+    })
+
+    // add default action to check for custom header and then forward to asg target group
+    listener.addAction('default-action', {
+      priority: 1,
+      conditions: [
+        elbv2.ListenerCondition.httpHeader(customHeaderName, [
+          customHeaderSecret.secretValue.toString(),
+        ]),
+      ],
+      action: elbv2.ListenerAction.forward([tg]),
     })
     return lb
   }
@@ -285,6 +290,7 @@ export class Ec2Stack extends Stack {
   private createCloudFrontDistribution(
     s3Bucket: s3.Bucket,
     lb: elbv2.ApplicationLoadBalancer,
+    customHeaderSecret: secretsmanager.ISecret,
     certificate: acm.ICertificate,
   ) {
     const distribution = new cloudfront.Distribution(this, 'distribution', {
@@ -294,6 +300,7 @@ export class Ec2Stack extends Stack {
       defaultRootObject: 'index.html',
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
       minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2016,
+      priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
       defaultBehavior: {
         origin: new origins.S3Origin(s3Bucket),
         allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
@@ -302,7 +309,11 @@ export class Ec2Stack extends Stack {
       },
       additionalBehaviors: {
         '/api/*': {
-          origin: new origins.LoadBalancerV2Origin(lb),
+          origin: new origins.LoadBalancerV2Origin(lb, {
+            customHeaders: {
+              customHeaderName: customHeaderSecret.secretValue.toString(),
+            },
+          }),
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
           viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
           originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_AND_CLOUDFRONT_2022,

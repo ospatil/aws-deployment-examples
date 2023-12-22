@@ -18,7 +18,7 @@ const usEast1Stack = new UsEast1Stack(app, 'UsEast1Stack', {
 const ec2Stack = new Ec2Stack(app, 'Ec2Stack', {
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,
-    region: 'ca-central-1',
+    region: process.env.AWS_PRIMARY_REGION,
   },
   crossRegionReferences: true,
   cloudfrontCertificate: usEast1Stack.certificate,

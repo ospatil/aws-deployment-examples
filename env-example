@@ -3,3 +3,4 @@ CLOUDFLARE_ZONE_NAME=example.com
 AWS_DNS_ZONE_NAME=my.example.com
 APP_DOMAIN=app.my.example.com
 CDK_DEFAULT_ACCOUNT=<AWS_ACCOUNT_ID>
+AWS_PRIMARY_REGION=ca-central-1
