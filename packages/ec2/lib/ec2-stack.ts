@@ -1,17 +1,22 @@
 import {
+  ArnFormat,
   Duration,
   RemovalPolicy,
   Stack,
   StackProps,
   aws_certificatemanager as acm,
   aws_autoscaling as asg,
+  aws_cloudfront as cloudfront,
   aws_dynamodb as dynamodb,
   aws_ec2 as ec2,
   aws_elasticloadbalancingv2 as elbv2,
   aws_iam as iam,
+  aws_cloudfront_origins as origins,
+  aws_route53 as route53,
   aws_s3 as s3,
   aws_s3_deployment as s3Deploy,
   aws_secretsmanager as secretsmanager,
+  aws_route53_targets as targets,
 } from 'aws-cdk-lib'
 import { Construct } from 'constructs'
 import { readFileSync } from 'node:fs'
@@ -22,14 +27,16 @@ import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
 import * as execa from 'execa'
 import { createCertificate } from './utils'
 
+export type Ec2StackProps = StackProps & {
+  cloudfrontCertificate: acm.ICertificate
+}
+
 export class Ec2Stack extends Stack {
   public readonly customHeaderSecret: secretsmanager.Secret
-  public readonly s3Bucket: s3.Bucket
-  public readonly lb: elbv2.ApplicationLoadBalancer
   readonly #dynamodbTableName = 'aws-examples-messages'
   readonly #dynamoTablePartitionKeyName = 'id'
 
-  constructor(scope: Construct, id: string, props?: StackProps) {
+  constructor(scope: Construct, id: string, props: Ec2StackProps) {
     super(scope, id, props)
     const vpc = this.createVpc()
 
@@ -57,9 +64,17 @@ export class Ec2Stack extends Stack {
     const certificate = createCertificate(this, 'alb-cert')
 
     // create LB
-    this.lb = this.createLoadBalancer(vpc, albSg, asg, certificate)
+    const lb = this.createLoadBalancer(vpc, albSg, asg, certificate)
 
-    this.s3Bucket = this.createStaticWebsite()
+    const s3Bucket = this.createStaticWebsite()
+
+    const distribution = this.createCloudFrontDistribution(
+      s3Bucket,
+      lb,
+      props.cloudfrontCertificate,
+    )
+
+    const route53DistAlias = this.createRoute53DistAlias(distribution)
   }
 
   private createVpc() {
@@ -265,5 +280,95 @@ export class Ec2Stack extends Stack {
     })
 
     return s3Bucket
+  }
+
+  private createCloudFrontDistribution(
+    s3Bucket: s3.Bucket,
+    lb: elbv2.ApplicationLoadBalancer,
+    certificate: acm.ICertificate,
+  ) {
+    const distribution = new cloudfront.Distribution(this, 'distribution', {
+      comment: 'CloudFront distribution for aws-examples',
+      domainNames: [process.env.APP_DOMAIN!],
+      certificate,
+      defaultRootObject: 'index.html',
+      httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
+      minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2016,
+      defaultBehavior: {
+        origin: new origins.S3Origin(s3Bucket),
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_GET_HEAD,
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        originRequestPolicy: cloudfront.OriginRequestPolicy.CORS_S3_ORIGIN,
+      },
+      additionalBehaviors: {
+        '/api/*': {
+          origin: new origins.LoadBalancerV2Origin(lb),
+          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_AND_CLOUDFRONT_2022,
+        },
+      },
+    })
+
+    // the oac is not yet supported by CDK, the workaround adopted from: https://github.com/aws/aws-cdk/issues/21771#issuecomment-1479201394
+    const oac = new cloudfront.CfnOriginAccessControl(this, 'cf-oac', {
+      originAccessControlConfig: {
+        name: 'aws-examples-aoc',
+        originAccessControlOriginType: 's3',
+        signingBehavior: 'always',
+        signingProtocol: 'sigv4',
+      },
+    })
+
+    const cfnDistribution = distribution.node.defaultChild as cloudfront.CfnDistribution
+    cfnDistribution.addOverride(
+      'Properties.DistributionConfig.Origins.0.S3OriginConfig.OriginAccessIdentity',
+      '',
+    )
+    cfnDistribution.addPropertyOverride(
+      'DistributionConfig.Origins.0.OriginAccessControlId',
+      oac.getAtt('Id'),
+    )
+
+    const comS3PolicyOverride = s3Bucket.node.findChild('Policy').node
+      .defaultChild as s3.CfnBucketPolicy
+    // statements[0] is for the autodelete lambda, statements[1] was for OAI that needs to be modified
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+    const statement = comS3PolicyOverride.policyDocument.statements[1]
+    if (statement._principal?.CanonicalUser) {
+      delete statement._principal.CanonicalUser
+    }
+
+    comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.1.Principal', {
+      Service: 'cloudfront.amazonaws.com',
+    })
+    comS3PolicyOverride.addOverride('Properties.PolicyDocument.Statement.1.Condition', {
+      StringEquals: {
+        'AWS:SourceArn': this.formatArn({
+          service: 'cloudfront',
+          region: '',
+          resource: 'distribution',
+          resourceName: distribution.distributionId,
+          arnFormat: ArnFormat.SLASH_RESOURCE_NAME,
+        }),
+      },
+    })
+
+    const s3OriginNode = distribution.node.findAll().find(child => child.node.id === 'S3Origin')
+    s3OriginNode?.node.tryRemoveChild('Resource')
+
+    return distribution
+  }
+
+  private createRoute53DistAlias(distribution: cloudfront.Distribution) {
+    const zone = route53.HostedZone.fromLookup(this, 'zone', {
+      domainName: process.env.AWS_DNS_ZONE_NAME!,
+    })
+
+    return new route53.ARecord(this, 'cloudfront-alias', {
+      zone,
+      recordName: process.env.APP_DOMAIN!,
+      target: route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(distribution)),
+    })
   }
 }
