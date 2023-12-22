@@ -281,7 +281,7 @@ export class Ec2Stack extends Stack {
       priority: 1,
       conditions: [
         elbv2.ListenerCondition.httpHeader(customHeaderName, [
-          customHeaderSecret.secretValue.toString(),
+          customHeaderSecret.secretValue.unsafeUnwrap(),
         ]),
       ],
       action: elbv2.ListenerAction.forward([tg]),
@@ -329,7 +329,7 @@ export class Ec2Stack extends Stack {
         '/api/*': {
           origin: new origins.LoadBalancerV2Origin(lb, {
             customHeaders: {
-              customHeaderName: customHeaderSecret.secretValue.toString(),
+              customHeaderName: customHeaderSecret.secretValue.unsafeUnwrap(),
             },
           }),
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
