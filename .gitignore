@@ -209,3 +209,4 @@ yalc.lock
 
 # ignore the cdk synth files
 temp*.yml
+.env.*
