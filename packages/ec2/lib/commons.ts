@@ -12,3 +12,5 @@ export function createCertificate(stack: Stack, id: string) {
 }
 
 export const customHeaderName = 'x-verify-code'
+
+export const dynamodbTableName = 'aws-examples-messages'

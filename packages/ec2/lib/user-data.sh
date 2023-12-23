@@ -12,26 +12,25 @@ dnf install -y git amazon-cloudwatch-agent
 # create cloudwatch config file
 cat <<EOF > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
 {
-  {
-    "agent": {
-      "run_as_user": "root"
-    },
-    "logs": {
-      "logs_collected": {
-        "files": {
-          "collect_list": [
-            {
-              "file_path": "/var/app/aws-deployment-examples/app.log",
-              "log_group_name": "api-logs",
-              "log_stream_name": "{instance_id}"
-            }
-          ]
-        }
+  "agent": {
+    "run_as_user": "root"
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/app/aws-deployment-examples/packages/backend/app.log",
+            "log_group_name": "aws-examples-api-logs",
+            "log_stream_name": "{instance_id}"
+          }
+        ]
       }
     }
   }
 }
 EOF
+
 # start cloudwatch agent
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
 

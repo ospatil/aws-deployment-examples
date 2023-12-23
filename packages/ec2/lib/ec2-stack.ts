@@ -25,23 +25,20 @@ import process from 'node:process'
 // eslint-disable-next-line import/no-extraneous-dependencies
 import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
 import * as execa from 'execa'
-import { createCertificate, customHeaderName } from './commons'
+import { createCertificate, customHeaderName, dynamodbTableName } from './commons'
 
 export type Ec2StackProps = StackProps & {
   cloudfrontCertificate: acm.ICertificate
 }
 
 export class Ec2Stack extends Stack {
-  readonly #dynamodbTableName = 'aws-examples-messages'
-  readonly #dynamoTablePartitionKeyName = 'id'
-
   constructor(scope: Construct, id: string, props: Ec2StackProps) {
     super(scope, id, props)
     const vpc = this.createVpc()
 
     // create dynamodb table
     const dynamodbTable = this.createDynamodb()
-    this.addDynamoDBRecord(this.#dynamodbTableName, dynamodbTable.tableArn, vpc)
+    this.addDynamoDBRecord(dynamodbTableName, dynamodbTable.tableArn, vpc)
 
     const prefixList = new PrefixListGetResource(this, 'prefixlist', { vpc })
 
@@ -73,21 +70,6 @@ export class Ec2Stack extends Stack {
     const route53DistAlias = this.createRoute53DistAlias(distribution)
   }
 
-  private createCustomHeaderSecret() {
-    return new secretsmanager.Secret(this, 'custom-header-secret', {
-      secretName: 'aws-examples-custom-header-secret',
-      generateSecretString: {
-        // exclude special characters to avoid escaping in the shell
-        excludeCharacters: '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
-        excludePunctuation: true,
-        includeSpace: false,
-        passwordLength: 32,
-        requireEachIncludedType: true,
-      },
-      removalPolicy: RemovalPolicy.DESTROY,
-    })
-  }
-
   private createVpc() {
     return new ec2.Vpc(this, 'vpc', {
       vpcName: 'aws-examples-vpc',
@@ -112,6 +94,37 @@ export class Ec2Stack extends Stack {
           subnets: [{ subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS }],
         },
       },
+    })
+  }
+
+  private createDynamodb() {
+    return new dynamodb.Table(this, dynamodbTableName, {
+      tableName: dynamodbTableName,
+      partitionKey: {
+        name: 'id',
+        type: dynamodb.AttributeType.NUMBER,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.DESTROY,
+    })
+  }
+
+  private addDynamoDBRecord(tableName: string, tableArn: string, vpc: ec2.Vpc) {
+    return new DynamoDBInsertResource(this, 'dynamodb-insert', { tableName, tableArn, vpc })
+  }
+
+  private createCustomHeaderSecret() {
+    return new secretsmanager.Secret(this, 'custom-header-secret', {
+      secretName: 'aws-examples-custom-header-secret',
+      generateSecretString: {
+        // exclude special characters to avoid escaping in the shell
+        excludeCharacters: '!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
+        excludePunctuation: true,
+        includeSpace: false,
+        passwordLength: 32,
+        requireEachIncludedType: true,
+      },
+      removalPolicy: RemovalPolicy.DESTROY,
     })
   }
 
@@ -141,58 +154,6 @@ export class Ec2Stack extends Stack {
       'Allow access from ALB',
     )
     return asgSg
-  }
-
-  private createDynamodb() {
-    return new dynamodb.Table(this, this.#dynamodbTableName, {
-      tableName: this.#dynamodbTableName,
-      partitionKey: {
-        name: this.#dynamoTablePartitionKeyName,
-        type: dynamodb.AttributeType.NUMBER,
-      },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      removalPolicy: RemovalPolicy.DESTROY,
-    })
-  }
-
-  private addDynamoDBRecord(tableName: string, tableArn: string, vpc: ec2.Vpc) {
-    return new DynamoDBInsertResource(this, 'dynamodb-insert', { tableName, tableArn, vpc })
-  }
-
-  private createLaunchTemplate(asgSg: ec2.SecurityGroup) {
-    const userDataScript = readFileSync('./lib/user-data.sh', 'utf8')
-
-    const policy = new iam.PolicyDocument({
-      statements: [
-        new iam.PolicyStatement({
-          effect: iam.Effect.ALLOW,
-          actions: [
-            'logs:CreateLogGroup',
-            'logs:CreateLogStream',
-            'logs:PutLogEvents',
-            'logs:DescribeLogStreams',
-          ],
-          resources: ['*'],
-        }),
-      ],
-    })
-
-    const role = new iam.Role(this, 'instance-role', {
-      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
-      managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBReadOnlyAccess')],
-      inlinePolicies: {
-        cloudwatchLogsPolicy: policy,
-      },
-    })
-
-    return new ec2.LaunchTemplate(this, 'launch-template', {
-      launchTemplateName: 'aws-examples-launch-template',
-      securityGroup: asgSg,
-      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T2, ec2.InstanceSize.MICRO),
-      machineImage: ec2.MachineImage.latestAmazonLinux2023(),
-      role,
-      userData: ec2.UserData.custom(userDataScript),
-    })
   }
 
   private createInstanceConnectEp(vpc: ec2.Vpc, asgSg: ec2.SecurityGroup) {
@@ -237,6 +198,54 @@ export class Ec2Stack extends Stack {
     })
   }
 
+  private createLaunchTemplate(asgSg: ec2.SecurityGroup) {
+    const userDataScript = readFileSync('./lib/user-data.sh', 'utf8')
+
+    const cloudwatchLogsPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: [
+            'logs:CreateLogGroup',
+            'logs:CreateLogStream',
+            'logs:PutLogEvents',
+            'logs:DescribeLogStreams',
+          ],
+          resources: ['*'],
+        }),
+      ],
+    })
+
+    // create a policy document with permissions to read from a single dynamodb table
+    const dynamodbPolicy = new iam.PolicyDocument({
+      statements: [
+        new iam.PolicyStatement({
+          effect: iam.Effect.ALLOW,
+          actions: ['dynamodb:Scan', 'dynamodb:Query', 'dynamodb:GetItem'],
+          resources: [dynamodbTableName],
+        }),
+      ],
+    })
+
+    const role = new iam.Role(this, 'instance-role', {
+      assumedBy: new iam.ServicePrincipal('ec2.amazonaws.com'),
+      // managedPolicies: [iam.ManagedPolicy.fromAwsManagedPolicyName('AmazonDynamoDBReadOnlyAccess')],
+      inlinePolicies: {
+        cloudwatchLogsPolicy,
+        dynamodbPolicy,
+      },
+    })
+
+    return new ec2.LaunchTemplate(this, 'launch-template', {
+      launchTemplateName: 'aws-examples-launch-template',
+      securityGroup: asgSg,
+      instanceType: ec2.InstanceType.of(ec2.InstanceClass.T2, ec2.InstanceSize.MICRO),
+      machineImage: ec2.MachineImage.latestAmazonLinux2023(),
+      role,
+      userData: ec2.UserData.custom(userDataScript),
+    })
+  }
+
   private createAutoScalingGroup(vpc: ec2.Vpc, launchTemplate: ec2.LaunchTemplate) {
     return new asg.AutoScalingGroup(this, 'asg', {
       vpc,
@@ -264,6 +273,10 @@ export class Ec2Stack extends Stack {
     const listener = lb.addListener('listener', {
       port: 443,
       certificates: [elbv2.ListenerCertificate.fromCertificateManager(certificate)],
+      defaultAction: elbv2.ListenerAction.fixedResponse(200, {
+        contentType: 'text/plain',
+        messageBody: 'OK',
+      }),
     })
 
     const tg = listener.addTargets('asg-target', {
@@ -277,7 +290,7 @@ export class Ec2Stack extends Stack {
     })
 
     // add default action to check for custom header and then forward to asg target group
-    listener.addAction('DefaultAction', {
+    listener.addAction('api', {
       priority: 1,
       conditions: [
         elbv2.ListenerCondition.httpHeader(customHeaderName, [
