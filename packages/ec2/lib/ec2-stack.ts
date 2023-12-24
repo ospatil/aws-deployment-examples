@@ -17,6 +17,7 @@ import {
   aws_s3_deployment as s3Deploy,
   aws_secretsmanager as secretsmanager,
   aws_route53_targets as targets,
+  aws_wafv2 as wafv2,
 } from 'aws-cdk-lib'
 import { Construct } from 'constructs'
 import { readFileSync } from 'node:fs'
@@ -29,6 +30,7 @@ import { createCertificate, customHeaderName, dynamodbTableName } from './common
 
 export type Ec2StackProps = StackProps & {
   cloudfrontCertificate: acm.ICertificate
+  webAcl: wafv2.CfnWebACL
 }
 
 export class Ec2Stack extends Stack {
@@ -65,6 +67,7 @@ export class Ec2Stack extends Stack {
       lb,
       customHeaderSecret,
       props.cloudfrontCertificate,
+      props.webAcl,
     )
 
     const route53DistAlias = this.createRoute53DistAlias(distribution)
@@ -303,7 +306,7 @@ export class Ec2Stack extends Stack {
 
   private createStaticWebsite() {
     // create S3 bucket, upload index.html, and create CloudFront distribution
-    const s3Bucket = new s3.Bucket(this, 'bucket', {
+    const s3Bucket = new s3.Bucket(this, 'website', {
       bucketName: 'aws-examples-s3-bucket',
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
@@ -322,11 +325,13 @@ export class Ec2Stack extends Stack {
     lb: elbv2.ApplicationLoadBalancer,
     customHeaderSecret: secretsmanager.ISecret,
     certificate: acm.ICertificate,
+    webAcl: wafv2.CfnWebACL,
   ) {
     const distribution = new cloudfront.Distribution(this, 'distribution', {
       comment: 'CloudFront distribution for aws-examples',
       domainNames: [process.env.APP_DOMAIN!],
       certificate,
+      webAclId: webAcl.attrArn,
       defaultRootObject: 'index.html',
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
       minimumProtocolVersion: cloudfront.SecurityPolicyProtocol.TLS_V1_2016,
@@ -341,7 +346,7 @@ export class Ec2Stack extends Stack {
         '/api/*': {
           origin: new origins.LoadBalancerV2Origin(lb, {
             customHeaders: {
-              customHeaderName: customHeaderSecret.secretValue.unsafeUnwrap(),
+              [customHeaderName]: customHeaderSecret.secretValue.unsafeUnwrap(),
             },
           }),
           allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,

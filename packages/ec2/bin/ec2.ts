@@ -22,4 +22,5 @@ const ec2Stack = new Ec2Stack(app, 'Ec2Stack', {
   },
   crossRegionReferences: true,
   cloudfrontCertificate: usEast1Stack.certificate,
+  webAcl: usEast1Stack.webAcl,
 })
