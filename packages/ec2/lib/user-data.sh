@@ -42,10 +42,14 @@ tar -xf $NODE_VERSION_DISTRO.tar.xz
 echo PATH=$NODE_DIR/$NODE_VERSION_DISTRO/bin:$PATH > /etc/profile.d/nodejs_path.sh
 source /etc/profile.d/nodejs_path.sh
 
+# get aws region using IMDSv2
+TOKEN=`curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 300"`
+REGION=`curl -H "X-aws-ec2-metadata-token: $TOKEN" -v http://169.254.169.254/latest/meta-data/placement/region`
+
 # create cloudwatch setup and start backend
 mkdir -p $APP_DIR
 cd $APP_DIR
 git clone https://github.com/ospatil/aws-deployment-examples.git
 cd aws-deployment-examples/packages/backend
 npm i
-npm start
+AWS_REGION=$REGION npm start

@@ -50,7 +50,7 @@ export class Ec2Stack extends Stack {
 
     const instanceConnectEp = this.createInstanceConnectEp(vpc, asgSg)
 
-    const launchTemplate = this.createLaunchTemplate(asgSg)
+    const launchTemplate = this.createLaunchTemplate(asgSg, dynamodbTable.tableArn)
 
     const asg = this.createAutoScalingGroup(vpc, launchTemplate)
 
@@ -198,7 +198,7 @@ export class Ec2Stack extends Stack {
     })
   }
 
-  private createLaunchTemplate(asgSg: ec2.SecurityGroup) {
+  private createLaunchTemplate(asgSg: ec2.SecurityGroup, tableArn: string) {
     const userDataScript = readFileSync('./lib/user-data.sh', 'utf8')
 
     const cloudwatchLogsPolicy = new iam.PolicyDocument({
@@ -222,7 +222,7 @@ export class Ec2Stack extends Stack {
         new iam.PolicyStatement({
           effect: iam.Effect.ALLOW,
           actions: ['dynamodb:Scan', 'dynamodb:Query', 'dynamodb:GetItem'],
-          resources: [dynamodbTableName],
+          resources: [tableArn],
         }),
       ],
     })
@@ -273,13 +273,11 @@ export class Ec2Stack extends Stack {
     const listener = lb.addListener('listener', {
       port: 443,
       certificates: [elbv2.ListenerCertificate.fromCertificateManager(certificate)],
-      defaultAction: elbv2.ListenerAction.fixedResponse(200, {
-        contentType: 'text/plain',
-        messageBody: 'OK',
-      }),
+      defaultAction: elbv2.ListenerAction.fixedResponse(403),
     })
 
-    const tg = listener.addTargets('asg-target', {
+    const tg = new elbv2.ApplicationTargetGroup(this, 'asg-target', {
+      vpc,
       port: 3000,
       protocol: elbv2.ApplicationProtocol.HTTP,
       targets: [asg],
@@ -296,6 +294,7 @@ export class Ec2Stack extends Stack {
         elbv2.ListenerCondition.httpHeader(customHeaderName, [
           customHeaderSecret.secretValue.unsafeUnwrap(),
         ]),
+        elbv2.ListenerCondition.pathPatterns(['/api/*']),
       ],
       action: elbv2.ListenerAction.forward([tg]),
     })
