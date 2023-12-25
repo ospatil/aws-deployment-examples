@@ -2,11 +2,14 @@ import {
   ArnFormat,
   Duration,
   RemovalPolicy,
+  SecretValue,
   Stack,
   StackProps,
   aws_certificatemanager as acm,
+  aws_elasticloadbalancingv2_actions as actions,
   aws_autoscaling as asg,
   aws_cloudfront as cloudfront,
+  aws_cognito as cognito,
   aws_dynamodb as dynamodb,
   aws_ec2 as ec2,
   aws_elasticloadbalancingv2 as elbv2,
@@ -16,6 +19,7 @@ import {
   aws_s3 as s3,
   aws_s3_deployment as s3Deploy,
   aws_secretsmanager as secretsmanager,
+  aws_ssm as ssm,
   aws_route53_targets as targets,
   aws_wafv2 as wafv2,
 } from 'aws-cdk-lib'
@@ -58,7 +62,11 @@ export class Ec2Stack extends Stack {
 
     const certificate = createCertificate(this, 'alb-cert')
 
-    const lb = this.createLoadBalancer(vpc, albSg, asg, certificate, customHeaderSecret)
+    const [lb, tg, listener] = this.createLoadBalancer(vpc, albSg, asg, certificate)
+
+    const [userPool, userPoolDomain, userPoolClient] = this.createCognitoUserPool(vpc)
+
+    this.addListenerRule(listener, tg, customHeaderSecret, userPool, userPoolDomain, userPoolClient)
 
     const s3Bucket = this.createStaticWebsite()
 
@@ -264,19 +272,12 @@ export class Ec2Stack extends Stack {
     albSg: ec2.SecurityGroup,
     asg: asg.AutoScalingGroup,
     certificate: acm.ICertificate,
-    customHeaderSecret: secretsmanager.ISecret,
   ) {
-    const lb = new elbv2.ApplicationLoadBalancer(this, 'alb', {
+    const alb = new elbv2.ApplicationLoadBalancer(this, 'alb', {
       vpc,
       internetFacing: true,
       loadBalancerName: 'aws-examples-alb',
       securityGroup: albSg,
-    })
-
-    const listener = lb.addListener('listener', {
-      port: 443,
-      certificates: [elbv2.ListenerCertificate.fromCertificateManager(certificate)],
-      defaultAction: elbv2.ListenerAction.fixedResponse(403),
     })
 
     const tg = new elbv2.ApplicationTargetGroup(this, 'asg-target', {
@@ -290,8 +291,74 @@ export class Ec2Stack extends Stack {
       },
     })
 
-    // add default action to check for custom header and then forward to asg target group
+    const listener = alb.addListener('listener', {
+      port: 443,
+      certificates: [elbv2.ListenerCertificate.fromCertificateManager(certificate)],
+      defaultAction: elbv2.ListenerAction.fixedResponse(403),
+    })
+
+    return [alb, tg, listener] as const
+  }
+
+  private createCognitoUserPool(vpc: ec2.Vpc) {
+    const userPool = new cognito.UserPool(this, 'user-pool')
+
+    const userPoolDomain = userPool.addDomain('user-pool-domain', {
+      cognitoDomain: {
+        domainPrefix: 'ospatil-aws-examples',
+      },
+    })
+
+    const googleClientId = ssm.StringParameter.valueForStringParameter(
+      this,
+      '/aws-examples/google-client-id',
+    )
+
+    const googleClientSecret = SecretValue.ssmSecure('/aws-examples/google-client-secret')
+
+    const provider = new cognito.UserPoolIdentityProviderGoogle(this, 'google-provider', {
+      clientId: googleClientId,
+      clientSecret: googleClientSecret.unsafeUnwrap(),
+      userPool,
+      attributeMapping: {
+        email: cognito.ProviderAttribute.GOOGLE_EMAIL,
+        givenName: cognito.ProviderAttribute.GOOGLE_GIVEN_NAME,
+        familyName: cognito.ProviderAttribute.GOOGLE_FAMILY_NAME,
+      },
+      scopes: ['email', 'openid'],
+    })
+
+    const userPoolCLient = userPool.addClient('user-pool-client', {
+      userPoolClientName: 'aws-examples-client',
+      generateSecret: true,
+      oAuth: {
+        flows: {
+          authorizationCodeGrant: true,
+        },
+        scopes: [cognito.OAuthScope.EMAIL, cognito.OAuthScope.OPENID],
+        callbackUrls: [process.env.APP_DOMAIN!],
+      },
+      supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.GOOGLE],
+    })
+
+    return [userPool, userPoolDomain, userPoolCLient] as const
+  }
+
+  private addListenerRule(
+    listener: elbv2.ApplicationListener,
+    tg: elbv2.ApplicationTargetGroup,
+    customHeaderSecret: secretsmanager.ISecret,
+    userPool: cognito.IUserPool,
+    userPoolDomain: cognito.UserPoolDomain,
+    userPoolClient: cognito.IUserPoolClient,
+  ) {
     listener.addAction('api', {
+      action: new actions.AuthenticateCognitoAction({
+        userPool,
+        userPoolClient,
+        userPoolDomain,
+        next: elbv2.ListenerAction.forward([tg]),
+      }),
       priority: 1,
       conditions: [
         elbv2.ListenerCondition.httpHeader(customHeaderName, [
@@ -299,9 +366,7 @@ export class Ec2Stack extends Stack {
         ]),
         elbv2.ListenerCondition.pathPatterns(['/api/*']),
       ],
-      action: elbv2.ListenerAction.forward([tg]),
     })
-    return lb
   }
 
   private createStaticWebsite() {
