@@ -2,7 +2,6 @@ import {
   ArnFormat,
   Duration,
   RemovalPolicy,
-  SecretValue,
   Stack,
   StackProps,
   aws_certificatemanager as acm,
@@ -19,7 +18,6 @@ import {
   aws_s3 as s3,
   aws_s3_deployment as s3Deploy,
   aws_secretsmanager as secretsmanager,
-  aws_ssm as ssm,
   aws_route53_targets as targets,
   aws_wafv2 as wafv2,
 } from 'aws-cdk-lib'
@@ -64,7 +62,7 @@ export class Ec2Stack extends Stack {
 
     const [lb, tg, listener] = this.createLoadBalancer(vpc, albSg, asg, certificate)
 
-    const [userPool, userPoolDomain, userPoolClient] = this.createCognitoUserPool(vpc)
+    const [userPool, userPoolDomain, userPoolClient] = this.createCognitoUserPool(lb)
 
     this.addListenerRule(listener, tg, customHeaderSecret, userPool, userPoolDomain, userPoolClient)
 
@@ -300,25 +298,24 @@ export class Ec2Stack extends Stack {
     return [alb, tg, listener] as const
   }
 
-  private createCognitoUserPool(vpc: ec2.Vpc) {
-    const userPool = new cognito.UserPool(this, 'user-pool')
+  private createCognitoUserPool(lb: elbv2.ApplicationLoadBalancer) {
+    const userPool = new cognito.UserPool(this, 'user-pool', {
+      removalPolicy: RemovalPolicy.DESTROY,
+    })
 
     const userPoolDomain = userPool.addDomain('user-pool-domain', {
       cognitoDomain: {
-        domainPrefix: 'ospatil-aws-examples',
+        domainPrefix: 'ospatil-examples',
       },
     })
 
-    const googleClientId = ssm.StringParameter.valueForStringParameter(
-      this,
-      '/aws-examples/google-client-id',
-    )
-
-    const googleClientSecret = SecretValue.ssmSecure('/aws-examples/google-client-secret')
+    const googleClientSecret = secretsmanager.Secret.fromSecretAttributes(this, 'google-secret', {
+      secretCompleteArn: process.env.GOOGLE_CLIENT_SECRET_ARN,
+    }).secretValue
 
     const provider = new cognito.UserPoolIdentityProviderGoogle(this, 'google-provider', {
-      clientId: googleClientId,
-      clientSecret: googleClientSecret.unsafeUnwrap(),
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecretValue: googleClientSecret,
       userPool,
       attributeMapping: {
         email: cognito.ProviderAttribute.GOOGLE_EMAIL,
@@ -336,10 +333,16 @@ export class Ec2Stack extends Stack {
           authorizationCodeGrant: true,
         },
         scopes: [cognito.OAuthScope.EMAIL, cognito.OAuthScope.OPENID],
-        callbackUrls: [process.env.APP_DOMAIN!],
+        callbackUrls: [
+          `https://${process.env.APP_DOMAIN!}/oauth2/idpresponse`,
+          `http://${lb.loadBalancerDnsName}/oauth2/idpresponse`,
+        ],
       },
       supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.GOOGLE],
     })
+
+    // make sure provider is created before client
+    userPoolCLient.node.addDependency(provider)
 
     return [userPool, userPoolDomain, userPoolCLient] as const
   }
@@ -357,6 +360,8 @@ export class Ec2Stack extends Stack {
         userPool,
         userPoolClient,
         userPoolDomain,
+        onUnauthenticatedRequest: elbv2.UnauthenticatedAction.DENY,
+        sessionTimeout: Duration.minutes(5),
         next: elbv2.ListenerAction.forward([tg]),
       }),
       priority: 1,
