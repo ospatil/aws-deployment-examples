@@ -1,16 +1,16 @@
-import { useRouteData } from '@solidjs/router'
-import { Show } from 'solid-js'
-import { ProtectedRouteData } from './protected.data'
+import { createAsync } from '@solidjs/router'
+import { loadProtectedData } from './protected.data'
+
+const message = createAsync(() => loadProtectedData())
 
 export default function Protected() {
-  const data = useRouteData<typeof ProtectedRouteData>()
   return (
     <div>
-      <Show when={!data.loading}>
-        <p class="text-2xl">
-          Message from DynamoDB: <span class="bg-violet-800">{data()}</span>
-        </p>
-      </Show>
+      {/* <Show when={!data.loading}> */}
+      <p class="text-2xl">
+        Message from DynamoDB: <span class="bg-violet-800">{message()}</span>
+      </p>
+      {/* </Show> */}
     </div>
   )
 }

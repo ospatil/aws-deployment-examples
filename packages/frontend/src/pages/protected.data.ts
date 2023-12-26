@@ -1,10 +1,10 @@
-import { createResource } from 'solid-js'
-
-export const ProtectedRouteData = () => {
+export const loadProtectedData = async () => {
   const apiUrl = import.meta.env.VITE_API_URL as string
-  const [payload] = createResource(async () => {
-    const response = await fetch(apiUrl)
-    return response.text()
-  })
-  return payload
+
+  const response = await fetch(apiUrl)
+
+  console.log(`response.status: ${response.status}`)
+  console.log(`response.headers: ${JSON.stringify(response.headers)}`)
+
+  return response.text()
 }
