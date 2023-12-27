@@ -1,13 +1,28 @@
 /* @refresh reload */
-import { HashRouter, Route } from '@solidjs/router'
+import { HashRouter, Route, useNavigate, useSearchParams } from '@solidjs/router'
+import { onMount } from 'solid-js'
 import { render } from 'solid-js/web'
 import Logos from './components/Logos'
 import './index.css'
 import Home from './pages/Home'
 import Protected from './pages/Protected'
-import { loadProtectedData } from './pages/protected.data'
 
 const App = (props: any) => {
+  const navigate = useNavigate()
+  // check if there are query params, if so, extract the next path and navigate to it
+  // this is used to navigate to the protected area after authentication
+  // eslint-disable-next-line unicorn/prevent-abbreviations
+  const [searchParams, setSearchParams] = useSearchParams()
+  const next = searchParams.next
+  console.log(`Received next: ${next}`)
+
+  onMount(() => {
+    if (next) {
+      setSearchParams({ next: undefined })
+      navigate(next, { replace: true })
+    }
+  })
+
   return (
     <div class="flex h-screen flex-col">
       <header class="ml-auto mr-auto overflow-y-auto">
@@ -25,7 +40,7 @@ render(
   () => (
     <HashRouter root={App}>
       <Route path="/" component={Home} />
-      <Route path="/protected" component={Protected} load={loadProtectedData} />
+      <Route path="/protected" component={Protected} />
     </HashRouter>
   ),
   document.querySelector('#root')!,

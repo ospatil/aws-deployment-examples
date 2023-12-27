@@ -14,7 +14,7 @@ export default function Home() {
         onClick={clickHandler}
         class="text-xl, m-2 bg-neutral-600 px-5 py-2 tracking-wider ring-2 ring-purple-500 ring-offset-4 ring-offset-slate-900"
       >
-        Let's go!
+        Login
       </button>
     </>
   )

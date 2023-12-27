@@ -335,7 +335,7 @@ export class Ec2Stack extends Stack {
         scopes: [cognito.OAuthScope.EMAIL, cognito.OAuthScope.OPENID],
         callbackUrls: [
           `https://${process.env.APP_DOMAIN!}/oauth2/idpresponse`,
-          `http://${lb.loadBalancerDnsName}/oauth2/idpresponse`,
+          `https://${lb.loadBalancerDnsName}/oauth2/idpresponse`,
         ],
       },
       supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.GOOGLE],
