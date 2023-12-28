@@ -1,6 +1,5 @@
 /* @refresh reload */
-import { HashRouter, Route, useNavigate, useSearchParams } from '@solidjs/router'
-import { onMount } from 'solid-js'
+import { HashRouter, Route, useNavigate } from '@solidjs/router'
 import { render } from 'solid-js/web'
 import Logos from './components/Logos'
 import './index.css'
@@ -9,19 +8,12 @@ import Protected from './pages/Protected'
 
 const App = (props: any) => {
   const navigate = useNavigate()
-  // check if there are query params, if so, extract the next path and navigate to it
-  // this is used to navigate to the protected area after authentication
-  // eslint-disable-next-line unicorn/prevent-abbreviations
-  const [searchParams, setSearchParams] = useSearchParams()
-  const next = searchParams.next
-  console.log(`Received next: ${next}`)
-
-  onMount(() => {
-    if (next) {
-      setSearchParams({ next: undefined })
-      navigate(next, { replace: true })
-    }
-  })
+  // check if 'next' is set in session storage. This is used to navigate to the protected area after authentication
+  const next = sessionStorage.getItem('next')
+  if (next) {
+    sessionStorage.removeItem('next')
+    navigate(next, { replace: true })
+  }
 
   return (
     <div class="flex h-screen flex-col">

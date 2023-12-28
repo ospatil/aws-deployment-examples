@@ -18,16 +18,6 @@ app.get('/api/healthz', c => {
   return c.text('ok')
 })
 
-/*
-  By the time request hits this endpoint, it has already been authenticated by the ALB using Cognito.
-  Simply redirect to the redirect_uri sent by the SPA.
-*/
-app.get('/api/login', c => {
-  const redirectUri = c.req.query('redirect_uri')
-  console.log(`/api/login endpoint: redirecting to ${redirectUri}`)
-  return c.redirect(redirectUri!)
-})
-
 app.get('/api/messages', async c => {
   const command = new GetCommand({ TableName: 'aws-examples-messages', Key: { id: 1 } })
   const response = await docClient.send(command)

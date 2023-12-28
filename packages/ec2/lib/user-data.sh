@@ -22,7 +22,14 @@ cat <<EOF > /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
           {
             "file_path": "/var/app/aws-deployment-examples/packages/backend/app.log",
             "log_group_name": "aws-examples-api-logs",
-            "log_stream_name": "{instance_id}"
+            "log_stream_name": "{instance_id}",
+            "retention_in_days": 1
+            "filters": [
+              {
+                "type": "exclude",
+                "expression": "healthz"
+              }
+            ]
           }
         ]
       }

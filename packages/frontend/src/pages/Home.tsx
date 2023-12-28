@@ -1,10 +1,9 @@
-import { useNavigate } from '@solidjs/router'
-
 export default function Home() {
-  const navigate = useNavigate()
-
   const clickHandler = async () => {
-    navigate('/protected', { replace: true })
+    // store the next path in session storage
+    sessionStorage.setItem('next', '/protected')
+    // trigger the login flow. It simply calls the login endpoint
+    window.location.href = import.meta.env.VITE_API_URI_LOGIN as string
   }
 
   return (

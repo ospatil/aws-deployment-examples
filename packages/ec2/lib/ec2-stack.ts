@@ -219,6 +219,7 @@ export class Ec2Stack extends Stack {
             'logs:CreateLogStream',
             'logs:PutLogEvents',
             'logs:DescribeLogStreams',
+            'logs:PutRetentionPolicy',
           ],
           resources: ['*'],
         }),
@@ -355,22 +356,42 @@ export class Ec2Stack extends Stack {
     userPoolDomain: cognito.UserPoolDomain,
     userPoolClient: cognito.IUserPoolClient,
   ) {
+    const cognitoCommonProps = {
+      userPool,
+      userPoolClient,
+      userPoolDomain,
+      sessionTimeout: Duration.minutes(5),
+    }
+
+    const commonConditions = [
+      elbv2.ListenerCondition.httpHeader(customHeaderName, [
+        customHeaderSecret.secretValue.unsafeUnwrap(),
+      ]),
+    ]
+
+    listener.addAction('login', {
+      action: new actions.AuthenticateCognitoAction({
+        ...cognitoCommonProps,
+        onUnauthenticatedRequest: elbv2.UnauthenticatedAction.AUTHENTICATE,
+        next: elbv2.ListenerAction.redirect({
+          protocol: 'HTTPS',
+          port: '443',
+          host: process.env.APP_DOMAIN!,
+          path: '/',
+        }),
+      }),
+      priority: 10,
+      conditions: [...commonConditions, elbv2.ListenerCondition.pathPatterns(['/api/login'])],
+    })
+
     listener.addAction('api', {
       action: new actions.AuthenticateCognitoAction({
-        userPool,
-        userPoolClient,
-        userPoolDomain,
+        ...cognitoCommonProps,
         onUnauthenticatedRequest: elbv2.UnauthenticatedAction.DENY,
-        sessionTimeout: Duration.minutes(5),
         next: elbv2.ListenerAction.forward([tg]),
       }),
-      priority: 1,
-      conditions: [
-        elbv2.ListenerCondition.httpHeader(customHeaderName, [
-          customHeaderSecret.secretValue.unsafeUnwrap(),
-        ]),
-        elbv2.ListenerCondition.pathPatterns(['/api/*']),
-      ],
+      priority: 20,
+      conditions: [...commonConditions, elbv2.ListenerCondition.pathPatterns(['/api/*'])],
     })
   }
 
@@ -397,6 +418,19 @@ export class Ec2Stack extends Stack {
     certificate: acm.ICertificate,
     webAcl: wafv2.CfnWebACL,
   ) {
+    const originProps = {
+      customHeaders: {
+        [customHeaderName]: customHeaderSecret.secretValue.unsafeUnwrap(),
+      },
+    }
+
+    const apiBehaviorProps = {
+      allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+      viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.HTTPS_ONLY,
+      originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_AND_CLOUDFRONT_2022,
+      cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+    }
+
     const distribution = new cloudfront.Distribution(this, 'distribution', {
       comment: 'CloudFront distribution for aws-examples',
       domainNames: [process.env.APP_DOMAIN!],
@@ -414,14 +448,12 @@ export class Ec2Stack extends Stack {
       },
       additionalBehaviors: {
         '/api/*': {
-          origin: new origins.LoadBalancerV2Origin(lb, {
-            customHeaders: {
-              [customHeaderName]: customHeaderSecret.secretValue.unsafeUnwrap(),
-            },
-          }),
-          allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
-          viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
-          originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_AND_CLOUDFRONT_2022,
+          origin: new origins.LoadBalancerV2Origin(lb, originProps),
+          ...apiBehaviorProps,
+        },
+        '/oauth2/*': {
+          origin: new origins.LoadBalancerV2Origin(lb, originProps),
+          ...apiBehaviorProps,
         },
       },
     })
