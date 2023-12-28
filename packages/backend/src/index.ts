@@ -1,11 +1,13 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb'
 import { serve } from '@hono/node-server'
 import { Context, Hono } from 'hono'
 import { getRuntimeKey } from 'hono/adapter'
 import { cors } from 'hono/cors'
+import { decode, verify } from 'hono/jwt'
 import { logger } from 'hono/logger'
-import * as jwt from 'jsonwebtoken'
+import process from 'node:process'
 
 // it will use AWS_REGION set by userdata script that fetches from instance metadata
 const client = new DynamoDBClient()
@@ -25,7 +27,6 @@ app.get('/api/messages', async c => {
 
   const user = await getUserClaims(c)
 
-  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   const message: string = response?.Item?.msg || 'Hello World!'
 
   return c.json({ message, user })
@@ -33,20 +34,23 @@ app.get('/api/messages', async c => {
 
 async function getUserClaims(c: Context) {
   // get user claims from header. The ALB will add the header x-amzn-oidc-data after successful authentication
-  const encodedJwt = c.req.header('x-amzn-oidc-data')!
+  const encodedJwt = c.req.header('x-amzn-oidc-data')
+  console.log(`x-amzn-oidc-data value -> ${encodedJwt}`)
   // decode the jwt
-  try {
-    const decodedJwt = jwt.decode(encodedJwt, { complete: true })!
-    const kid = decodedJwt.header.kid // get the public key from the jwks endpoint
-    const keyEndpoint = `https://public-keys.auth.elb.${process.env.AWS_REGION}.amazonaws.com/${kid}`
-    const response = await fetch(keyEndpoint)
-    const publicKey = await response.text()
+  if (encodedJwt) {
+    try {
+      const { header } = decode(encodedJwt)
+      const kid = header?.kid // get the public key from the jwks endpoint
+      const keyEndpoint = `https://public-keys.auth.elb.${process.env.AWS_REGION}.amazonaws.com/${kid}`
+      const response = await fetch(keyEndpoint)
+      const publicKey = await response.text()
 
-    // verify the jwt
-    const claims = jwt.verify(encodedJwt, publicKey, { algorithms: ['ES256'] })
-    return claims
-  } catch (error) {
-    console.error(error)
+      // verify the jwt
+      const claims = await verify(encodedJwt, publicKey)
+      return claims as Record<string, unknown>
+    } catch (error) {
+      console.error(error)
+    }
   }
 
   return {}
