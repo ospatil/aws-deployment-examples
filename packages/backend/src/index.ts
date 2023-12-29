@@ -5,8 +5,8 @@ import { serve } from '@hono/node-server'
 import { Context, Hono } from 'hono'
 import { getRuntimeKey } from 'hono/adapter'
 import { cors } from 'hono/cors'
-import { decode, verify } from 'hono/jwt'
 import { logger } from 'hono/logger'
+import * as jwt from 'jsonwebtoken'
 import process from 'node:process'
 
 // it will use AWS_REGION set by userdata script that fetches from instance metadata
@@ -34,19 +34,26 @@ app.get('/api/messages', async c => {
 
 async function getUserClaims(c: Context) {
   // get user claims from header. The ALB will add the header x-amzn-oidc-data after successful authentication
-  const encodedJwt = c.req.header('x-amzn-oidc-data')
-  console.log(`x-amzn-oidc-data value -> ${encodedJwt}`)
+  const encodedToken = c.req.header('x-amzn-oidc-data')
+  console.log(`x-amzn-oidc-data value: ${encodedToken}`)
+
   // decode the jwt
-  if (encodedJwt) {
+  if (encodedToken) {
     try {
-      const { header } = decode(encodedJwt)
-      const kid = header?.kid // get the public key from the jwks endpoint
+      // ALB jwt has ending padding (==) that JWT spec prohibits, need to trim it
+      const trimmedToken = encodedToken.replace(/=+$/, '')
+      const unverifiedToken = jwt.decode(trimmedToken, { complete: true })
+      const kid = unverifiedToken?.header?.kid
+      if (!kid) {
+        console.error('kid not found in token')
+      }
+
       const keyEndpoint = `https://public-keys.auth.elb.${process.env.AWS_REGION}.amazonaws.com/${kid}`
       const response = await fetch(keyEndpoint)
       const publicKey = await response.text()
 
       // verify the jwt
-      const claims = await verify(encodedJwt, publicKey)
+      const claims = jwt.verify(trimmedToken, publicKey, { algorithms: ['ES256'] })
       return claims as Record<string, unknown>
     } catch (error) {
       console.error(error)
