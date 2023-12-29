@@ -12,7 +12,8 @@
     "packages/*"
   ],
   "scripts": {
-    "delegate-subdomain": ". ./scripts/delegate-subdomain.sh"
+    "delegate-subdomain": ". ./scripts/delegate-subdomain.sh",
+    "link:custom-resources": "npx yalc link custom-resources"
   },
   "devDependencies": {
     "prettier": "^3.1.1",

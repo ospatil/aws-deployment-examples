@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "test": "jest"
+    "test": "jest",
+    "yalc:publish": "yalc publish --push"
   },
   "devDependencies": {
     "@types/jest": "^29.5.8",

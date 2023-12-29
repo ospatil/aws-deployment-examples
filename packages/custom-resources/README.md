@@ -1,9 +1,9 @@
-# Welcome to your CDK TypeScript Construct Library project
+# AWS CDK Custom Resources
 
-You should explore the contents of this project. It demonstrates a CDK Construct Library that includes a construct (`CustomRes`)
-which contains an Amazon SQS queue that is subscribed to an Amazon SNS topic.
+This is a CDK Construct Library project that contains the following custom resources:
 
-The construct defines an interface (`CustomResProps`) to configure the visibility timeout of the queue.
+1. `prefixlist-get-resource`: gets the AWS cloudfront prefix list used to configure ALB security group to restrict access only from cloudfront.
+2. `dynamodb-insert-resource`: inserts a record into DynamoDB table to be used in the application
 
 ## Useful commands
 
