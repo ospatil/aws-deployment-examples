@@ -3,7 +3,9 @@ import { Show } from 'solid-js/web'
 
 type ReturnDataType = {
   message: string
-  user: Record<string, unknown>
+  user: {
+    given_name: string
+  }
 }
 
 export const loadProtectedData = async () => {
@@ -20,10 +22,10 @@ export default function Protected() {
     <Show when={data()}>
       <div>
         <p class="text-2xl">
-          Message from DynamoDB: <span class="bg-violet-800">{data()?.message}</span>
+          Hello <span class="bg-violet-800">{data()?.user?.given_name}!</span> Message from
+          DynamoDB: <span class="bg-violet-800">{data()?.message}</span>
         </p>
       </div>
-      <pre>{JSON.stringify(data()?.user, null, 2)}</pre>
     </Show>
   )
 }
