@@ -6,9 +6,10 @@ Set of examples to demonstrate the various ways applications can be deployed on 
 
 1. Node.js 20.x
 2. [direnv](https://direnv.net/)
-3. [httpie](https://httpie.io/)
-4. AWS CLI with account setup. (<https://www.granted.dev> is a great tool for switching profiles.)
-5. `aws-cdk` and `yalc`: `npm i -g aws-cdk yalc`. `Yalc` is a tool to work easily with npm packages locally.
+3. curl
+4. [httpie](https://httpie.io/) (optional - only needed for the domain configuration script `./scripts/delegate-subdomain.sh`)
+5. AWS CLI with account setup. (<https://www.granted.dev> is a great tool for switching profiles.)
+6. `aws-cdk` and `yalc`: `npm i -g aws-cdk yalc`. `Yalc` is a tool to work easily with npm packages locally.
 
 ## Initial setup
 
