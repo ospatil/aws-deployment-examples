@@ -323,7 +323,6 @@ export class Ec2Stack extends Stack {
         givenName: cognito.ProviderAttribute.GOOGLE_GIVEN_NAME,
         familyName: cognito.ProviderAttribute.GOOGLE_FAMILY_NAME,
       },
-      scopes: ['email', 'openid'],
     })
 
     const userPoolCLient = userPool.addClient('user-pool-client', {
@@ -333,7 +332,7 @@ export class Ec2Stack extends Stack {
         flows: {
           authorizationCodeGrant: true,
         },
-        scopes: [cognito.OAuthScope.EMAIL, cognito.OAuthScope.OPENID],
+        scopes: [cognito.OAuthScope.EMAIL, cognito.OAuthScope.OPENID, cognito.OAuthScope.PROFILE],
         callbackUrls: [
           `https://${process.env.APP_DOMAIN!}/oauth2/idpresponse`,
           `https://${lb.loadBalancerDnsName}/oauth2/idpresponse`,
