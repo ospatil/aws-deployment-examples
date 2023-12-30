@@ -40,8 +40,11 @@ async function getUserClaims(c: Context) {
   // decode the jwt
   if (encodedToken) {
     try {
-      // ALB jwt has ending padding (==) that JWT spec prohibits, need to trim it
-      const trimmedToken = encodedToken.replace(/=+$/, '')
+      // ALB jwt can have ending padding (one or more = characters) in any of the three sections: header, payload or signature that JWT spec prohibits, need to trim it
+      const trimmedToken = encodedToken
+        .split('.')
+        .map(str => str.replace(/=+$/, ''))
+        .join('.')
       const unverifiedToken = jwt.decode(trimmedToken, { complete: true })
       const kid = unverifiedToken?.header?.kid
       if (!kid) {

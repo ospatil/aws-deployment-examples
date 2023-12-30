@@ -41,6 +41,7 @@
       "n/file-extension-in-import": "off",
       "unicorn/filename-case": "off",
       "capitalized-comments": "off",
+      "unicorn/prevent-abbreviations": "off",
       "@typescript-eslint/naming-convention": "off",
       "@typescript-eslint/class-literal-property-style": [
         "error",
