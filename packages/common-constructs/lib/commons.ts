@@ -1,12 +1,16 @@
 import { aws_certificatemanager as acm, aws_route53 as route53, Stack } from 'aws-cdk-lib'
-import process from 'node:process'
 
-export function createCertificate(stack: Stack, id: string) {
+export function createCertificate(
+  stack: Stack,
+  id: string,
+  awsDnsZoneName: string,
+  appDomain: string,
+) {
   const hostedZone = route53.HostedZone.fromLookup(stack, 'hosted-zone', {
-    domainName: process.env.AWS_DNS_ZONE_NAME!,
+    domainName: awsDnsZoneName,
   })
   return new acm.Certificate(stack, id, {
-    domainName: process.env.APP_DOMAIN!,
+    domainName: appDomain,
     validation: acm.CertificateValidation.fromDns(hostedZone),
   })
 }

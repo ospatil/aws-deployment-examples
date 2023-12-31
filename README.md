@@ -17,10 +17,9 @@ Set of examples to demonstrate the various ways applications can be deployed on 
 * Install dependencies.
   * Root folder: `npm i`
   * Install dependencies of all the projects: `npm i -ws`
-* The `custom-resources` project is an *aws cdk* library project with custom resources.
-  * Build the project: `npm run build -w custom-resources`
-  * Link it: `npm run link:custom-resources`
-  * Publish it to `yalc`: `npm run yalc:publish -w custom-resources`
+* The `common-constructs` project is an *aws cdk* library project with custom resources and common constructs.
+  * Build the project: `npm run build -w common-constructs`
+  * Publish it to `yalc`: `npm run yalc:publish -w common-constructs`
 * Create `.env`. The `env-example` file can be used as a template for it.
 * **Domain setup**
   * I use *Cloudflare* as my DNS provider and wanted to delegate only a sub-domain to *Route53*. The script `./scripts/delegate-subdomain.sh` does that.

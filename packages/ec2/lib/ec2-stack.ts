@@ -26,9 +26,14 @@ import { readFileSync } from 'node:fs'
 import * as path from 'node:path'
 import process from 'node:process'
 // eslint-disable-next-line import/no-extraneous-dependencies
-import { DynamoDBInsertResource, PrefixListGetResource } from 'custom-resources'
+import {
+  DynamoDBInsertResource,
+  PrefixListGetResource,
+  createCertificate,
+  customHeaderName,
+  dynamodbTableName,
+} from 'common-constructs'
 import * as execa from 'execa'
-import { createCertificate, customHeaderName, dynamodbTableName } from './commons'
 
 export type Ec2StackProps = StackProps & {
   cloudfrontCertificate: acm.ICertificate
@@ -58,7 +63,12 @@ export class Ec2Stack extends Stack {
 
     const asg = this.createAutoScalingGroup(vpc, launchTemplate)
 
-    const certificate = createCertificate(this, 'alb-cert')
+    const certificate = createCertificate(
+      this,
+      'alb-cert',
+      process.env.AWS_DNS_ZONE_NAME!,
+      process.env.APP_DOMAIN!,
+    )
 
     const [lb, tg, listener] = this.createLoadBalancer(vpc, albSg, asg, certificate)
 

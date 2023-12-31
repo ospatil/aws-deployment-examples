@@ -2,13 +2,23 @@ import { Stack, StackProps, aws_certificatemanager as acm, aws_wafv2 as wafv2 } 
 import { Construct } from 'constructs'
 import { createCertificate } from './commons'
 
+export type UsEast1StackProps = StackProps & {
+  awsDnsZoneName: string
+  appDomain: string
+}
+
 export class UsEast1Stack extends Stack {
   public readonly certificate: acm.ICertificate
   public readonly webAcl: wafv2.CfnWebACL
 
-  constructor(scope: Construct, id: string, props: StackProps) {
+  constructor(scope: Construct, id: string, props: UsEast1StackProps) {
     super(scope, id, props)
-    this.certificate = createCertificate(this, 'cloudfront-cert')
+    this.certificate = createCertificate(
+      this,
+      'cloudfront-cert',
+      props.awsDnsZoneName,
+      props.appDomain,
+    )
     this.webAcl = this.createWebAcl()
   }
 
