@@ -2,7 +2,7 @@ import { Duration, custom_resources as cr, aws_ec2 as ec2, aws_logs as logs } fr
 import { Construct } from 'constructs'
 
 export type PrefixListGetResourceProps = {
-  vpc: ec2.Vpc
+  vpc: ec2.IVpc
   name?: string
 }
 

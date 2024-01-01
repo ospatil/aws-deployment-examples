@@ -10,7 +10,7 @@ import { Construct } from 'constructs'
 export type DynamoDBInsertResourceProps = {
   tableName: string
   tableArn: string
-  vpc: ec2.Vpc
+  vpc: ec2.IVpc
 }
 
 export class DynamoDBInsertResource extends Construct {
