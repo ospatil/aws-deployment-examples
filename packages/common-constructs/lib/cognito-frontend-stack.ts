@@ -135,6 +135,8 @@ export class CognitoFrontendStack extends NestedStack {
       sources: [s3Deploy.Source.asset(assetPath)],
     })
 
+    depl.node.addDependency(s3Bucket)
+
     return s3Bucket
   }
 

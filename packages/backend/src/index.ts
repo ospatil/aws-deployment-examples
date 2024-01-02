@@ -35,7 +35,6 @@ app.get('/api/messages', async c => {
 async function getUserClaims(c: Context) {
   // get user claims from header. The ALB will add the header x-amzn-oidc-data after successful authentication
   const encodedToken = c.req.header('x-amzn-oidc-data')
-  console.log(`x-amzn-oidc-data value: ${encodedToken}`)
 
   // decode the jwt
   if (encodedToken) {
@@ -45,6 +44,9 @@ async function getUserClaims(c: Context) {
         .split('.')
         .map(str => str.replace(/=+$/, ''))
         .join('.')
+
+      console.log(`trimmedToken value: ${trimmedToken}`)
+
       const unverifiedToken = jwt.decode(trimmedToken, { complete: true })
       const kid = unverifiedToken?.header?.kid
       if (!kid) {
