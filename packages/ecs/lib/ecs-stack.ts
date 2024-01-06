@@ -3,6 +3,8 @@ import {
   Stack,
   StackProps,
   aws_certificatemanager as acm,
+  aws_elasticloadbalancingv2_actions as actions,
+  aws_cognito as cognito,
   aws_ec2 as ec2,
   aws_ecr_assets as ecrAssets,
   aws_ecs as ecs,
@@ -11,9 +13,10 @@ import {
   aws_iam as iam,
   aws_logs as logs,
   aws_route53 as route53,
+  aws_secretsmanager as secretsmanager,
   aws_wafv2 as wafv2,
 } from 'aws-cdk-lib'
-import { BaseBackendStack, CognitoFrontendStack } from 'common-constructs' // eslint-disable-line import/no-extraneous-dependencies
+import { BaseBackendStack, CognitoFrontendStack, customHeaderName } from 'common-constructs' // eslint-disable-line import/no-extraneous-dependencies
 import { Construct } from 'constructs'
 import * as path from 'node:path'
 import process from 'node:process'
@@ -53,6 +56,15 @@ export class EcsStack extends Stack {
       cloudfrontCertificate: props.cloudfrontCertificate,
       webAcl: props.webAcl,
     })
+
+    this.addListenerRules(
+      lb,
+      loadBalancedFargateService,
+      customHeaderSecret,
+      cognitoFrontendStack.userPool,
+      cognitoFrontendStack.userPoolDomain,
+      cognitoFrontendStack.userPoolClient,
+    )
   }
 
   private createTaskRole(tableArn: string): iam.IRole {
@@ -167,5 +179,58 @@ export class EcsStack extends Stack {
     })
 
     return taskDef
+  }
+
+  private addListenerRules(
+    lb: elbv2.IApplicationLoadBalancer,
+    loadBalancedFargateService: ecsPatterns.ApplicationLoadBalancedFargateService,
+    customHeaderSecret: secretsmanager.ISecret,
+    userPool: cognito.IUserPool,
+    userPoolDomain: cognito.IUserPoolDomain,
+    userPoolClient: cognito.IUserPoolClient,
+  ) {
+    const listener = lb.listeners[0]
+    const cognitoCommonProps = {
+      userPool,
+      userPoolClient,
+      userPoolDomain,
+      sessionTimeout: Duration.minutes(5),
+    }
+
+    const commonConditions = [
+      elbv2.ListenerCondition.httpHeader(customHeaderName, [
+        customHeaderSecret.secretValue.unsafeUnwrap(),
+      ]),
+    ]
+
+    // add default action
+    listener.addAction('default', {
+      action: elbv2.ListenerAction.fixedResponse(403),
+    })
+
+    listener.addAction('login', {
+      action: new actions.AuthenticateCognitoAction({
+        ...cognitoCommonProps,
+        onUnauthenticatedRequest: elbv2.UnauthenticatedAction.AUTHENTICATE,
+        next: elbv2.ListenerAction.redirect({
+          protocol: 'HTTPS',
+          port: '443',
+          host: process.env.APP_DOMAIN!,
+          path: '/',
+        }),
+      }),
+      priority: 10,
+      conditions: [...commonConditions, elbv2.ListenerCondition.pathPatterns(['/api/login'])],
+    })
+
+    listener.addAction('api', {
+      action: new actions.AuthenticateCognitoAction({
+        ...cognitoCommonProps,
+        onUnauthenticatedRequest: elbv2.UnauthenticatedAction.DENY,
+        next: elbv2.ListenerAction.forward([loadBalancedFargateService.targetGroup]),
+      }),
+      priority: 20,
+      conditions: [...commonConditions, elbv2.ListenerCondition.pathPatterns(['/api/*'])],
+    })
   }
 }
