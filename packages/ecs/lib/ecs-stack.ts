@@ -163,7 +163,7 @@ export class EcsStack extends Stack {
     const taskDef = new ecs.FargateTaskDefinition(this, 'task-def', {
       taskRole,
       memoryLimitMiB: 512,
-      cpu: 512,
+      cpu: 256,
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
         cpuArchitecture: ecs.CpuArchitecture.ARM64,

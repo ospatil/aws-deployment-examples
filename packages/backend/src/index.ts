@@ -62,7 +62,7 @@ async function getUserClaims(c: Context) {
       // // verify the jwt
       // const claims = jwt.verify(trimmedToken, publicKey, { algorithms: ['ES256'] })
       // return claims as Record<string, unknown>
-      return unverifiedToken
+      return unverifiedToken?.payload
     } catch (error) {
       console.error(error)
     }
