@@ -75,9 +75,15 @@ export class EcsStack extends Stack {
           actions: ['dynamodb:Scan', 'dynamodb:Query', 'dynamodb:GetItem'],
           resources: [tableArn],
         }),
+      ],
+    })
+
+    const assumeRolePolicy = new iam.PolicyDocument({
+      statements: [
         new iam.PolicyStatement({
           effect: iam.Effect.ALLOW,
-          actions: ['sts:assumeRole'],
+          actions: ['sts:AssumeRole'],
+          resources: ['*'],
           conditions: {
             ArnLike: {
               'aws:SourceArn': `arn:aws:ecs:${process.env.AWS_PRIMARY_REGION}:${process.env.CDK_DEFAULT_ACCOUNT}:*`,
@@ -91,6 +97,7 @@ export class EcsStack extends Stack {
       assumedBy: new iam.ServicePrincipal('ecs-tasks.amazonaws.com'),
       roleName: 'aws-examples-ecs-task-role',
       inlinePolicies: {
+        assumeRolePolicy,
         dynamodbPolicy,
       },
     })
@@ -133,13 +140,21 @@ export class EcsStack extends Stack {
           domainName: process.env.AWS_DNS_ZONE_NAME!,
         }),
         healthCheckGracePeriod: Duration.seconds(60),
+        loadBalancerName: 'aws-examples-alb',
         openListener: false,
         protocol: elbv2.ApplicationProtocol.HTTPS,
-        publicLoadBalancer: false,
+        recordType: ecsPatterns.ApplicationLoadBalancedServiceRecordType.NONE,
         securityGroups: [serviceSg],
         taskDefinition: this.createTaskDefinition(taskRole),
       },
     )
+
+    loadBalancedFargateService.targetGroup.configureHealthCheck({
+      path: '/api/healthz',
+      port: '3000',
+      protocol: elbv2.Protocol.HTTP,
+      interval: Duration.seconds(60),
+    })
 
     return loadBalancedFargateService
   }
@@ -148,7 +163,7 @@ export class EcsStack extends Stack {
     const taskDef = new ecs.FargateTaskDefinition(this, 'task-def', {
       taskRole,
       memoryLimitMiB: 512,
-      cpu: 256,
+      cpu: 512,
       runtimePlatform: {
         operatingSystemFamily: ecs.OperatingSystemFamily.LINUX,
         cpuArchitecture: ecs.CpuArchitecture.ARM64,
@@ -156,8 +171,6 @@ export class EcsStack extends Stack {
     })
 
     taskDef.addContainer('aws-examples-api', {
-      memoryLimitMiB: 512,
-      cpu: 512,
       image: ecs.ContainerImage.fromDockerImageAsset(
         new ecrAssets.DockerImageAsset(this, 'docker-image-asset', {
           directory: path.join(process.cwd(), '..', 'backend'),

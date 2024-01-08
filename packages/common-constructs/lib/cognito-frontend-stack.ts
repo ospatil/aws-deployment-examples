@@ -1,5 +1,6 @@
 import {
   ArnFormat,
+  Duration,
   NestedStack,
   NestedStackProps,
   RemovalPolicy,
@@ -114,6 +115,9 @@ export class CognitoFrontendStack extends NestedStack {
         ],
       },
       supportedIdentityProviders: [cognito.UserPoolClientIdentityProvider.GOOGLE],
+      accessTokenValidity: Duration.minutes(5),
+      idTokenValidity: Duration.minutes(5),
+      refreshTokenValidity: Duration.days(7),
     })
 
     // make sure provider is created before client
