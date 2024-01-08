@@ -14,7 +14,7 @@ import { PrefixListGetResource } from './prefixlist-get-resource'
 export class BaseBackendStack extends NestedStack {
   public readonly vpc: ec2.IVpc
   public readonly dynamodbTable: dynamodb.ITableV2
-  public readonly prefixList: PrefixListGetResource
+  public readonly prefixList: ec2.IPrefixList
   public readonly customHeaderSecret: secretsmanager.ISecret
   public readonly albSg: ec2.ISecurityGroup
 
@@ -24,7 +24,9 @@ export class BaseBackendStack extends NestedStack {
     this.vpc = this.createVpc()
     this.dynamodbTable = this.createDynamodb()
     this.addDynamoDBRecord(dynamodbTableName, this.dynamodbTable.tableArn, this.vpc)
-    this.prefixList = new PrefixListGetResource(this, 'prefixlist', { vpc: this.vpc })
+    this.prefixList = new PrefixListGetResource(this, 'prefixlist', {
+      name: 'com.amazonaws.global.cloudfront.origin-facing',
+    }).prefixList
     this.customHeaderSecret = this.createCustomHeaderSecret()
     this.albSg = this.createAlbSg(this.vpc, this.prefixList)
   }
@@ -87,7 +89,7 @@ export class BaseBackendStack extends NestedStack {
     })
   }
 
-  private createAlbSg(vpc: ec2.IVpc, prefixList: PrefixListGetResource) {
+  private createAlbSg(vpc: ec2.IVpc, prefixList: ec2.IPrefixList) {
     const albSg = new ec2.SecurityGroup(this, 'lb-sg', {
       vpc,
       securityGroupName: 'aws-examples-lb-sg',
