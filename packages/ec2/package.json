@@ -9,7 +9,7 @@
     "watch": "tsc -w",
     "test": "jest",
     "cdk": "cdk",
-    "link:common-constructs": "npx yalc link common-constructs --pure"
+    "link:common-constructs": "npx yalc link common-constructs"
   },
   "devDependencies": {
     "@types/jest": "^29.5.8",
