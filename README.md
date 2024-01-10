@@ -32,3 +32,4 @@ Set of examples to demonstrate the various ways applications can be deployed on 
 ## Examples
 
 1. [Frontend on S3, backend on EC2 with CloudFront, ALB and Cognito authentication with google](./docs/01-ec2.md)
+2. [Frontend on S3, backend on ECS with CloudFront, ALB and Cognito authentication with google](./docs/02-ecs.md)
