@@ -1,16 +1,9 @@
-import {
-  Duration,
-  custom_resources as cr,
-  aws_ec2 as ec2,
-  aws_iam as iam,
-  aws_logs as logs,
-} from 'aws-cdk-lib'
+import { Duration, custom_resources as cr, aws_iam as iam, aws_logs as logs } from 'aws-cdk-lib'
 import { Construct } from 'constructs'
 
 export type DynamoDBInsertResourceProps = {
   tableName: string
   tableArn: string
-  vpc: ec2.IVpc
 }
 
 export class DynamoDBInsertResource extends Construct {
@@ -48,8 +41,6 @@ export class DynamoDBInsertResource extends Construct {
       ]),
       logRetention: logs.RetentionDays.ONE_DAY,
       timeout: Duration.minutes(1),
-      vpc: props.vpc,
-      vpcSubnets: { subnetType: ec2.SubnetType.PRIVATE_WITH_EGRESS },
     })
   }
 }

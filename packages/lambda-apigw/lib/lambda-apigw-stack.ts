@@ -1,16 +1,27 @@
-import * as cdk from 'aws-cdk-lib';
-import { Construct } from 'constructs';
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
+import { RemovalPolicy, Stack, StackProps, aws_dynamodb as dynamodb } from 'aws-cdk-lib'
+import { DynamoDBInsertResource, dynamodbTableName } from 'common-constructs'
+import { Construct } from 'constructs'
 
-export class LambdaApigwStack extends cdk.Stack {
-  constructor(scope: Construct, id: string, props?: cdk.StackProps) {
-    super(scope, id, props);
+export class LambdaApigwStack extends Stack {
+  constructor(scope: Construct, id: string, props?: StackProps) {
+    super(scope, id, props)
+    const dynamodbTable = this.createDynamodb()
+    this.addDynamoDBRecord(dynamodbTableName, dynamodbTable.tableArn)
+  }
 
-    // The code that defines your stack goes here
+  private createDynamodb() {
+    return new dynamodb.Table(this, dynamodbTableName, {
+      tableName: dynamodbTableName,
+      partitionKey: {
+        name: 'id',
+        type: dynamodb.AttributeType.NUMBER,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: RemovalPolicy.DESTROY,
+    })
+  }
 
-    // example resource
-    // const queue = new sqs.Queue(this, 'LambdaApigwQueue', {
-    //   visibilityTimeout: cdk.Duration.seconds(300)
-    // });
+  private addDynamoDBRecord(tableName: string, tableArn: string) {
+    return new DynamoDBInsertResource(this, 'dynamodb-insert', { tableName, tableArn })
   }
 }

@@ -71,7 +71,7 @@ export class BaseBackendStack extends NestedStack {
   }
 
   private addDynamoDBRecord(tableName: string, tableArn: string, vpc: ec2.IVpc) {
-    return new DynamoDBInsertResource(this, 'dynamodb-insert', { tableName, tableArn, vpc })
+    return new DynamoDBInsertResource(this, 'dynamodb-insert', { tableName, tableArn })
   }
 
   private createCustomHeaderSecret() {
