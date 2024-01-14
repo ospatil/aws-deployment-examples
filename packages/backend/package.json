@@ -1,11 +1,12 @@
 {
   "name": "backend",
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "dev": "AWS_REGION=ca-central-1 tsx watch --clear-screen=false src/index.ts",
     "start": "tsx src/index.ts > app.log 2>&1 &",
     "start:docker": "tsx src/index.ts",
     "docker:build": "docker build -t aws-examples-backend .",
-    "docker:run": "docker run -p 3000:3000 --rm -d --name aws-examples-backend aws-examples-backend"
+    "docker:run": "docker run -p 3000:3000 --rm -d --name aws-examples-backend aws-examples-backend",
+    "docker:dynamodb": "docker run --rm --name dynamodb -p 8000:8000 -d amazon/dynamodb-local -jar DynamoDBLocal.jar -sharedDb -dbPath ."
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.489.0",
