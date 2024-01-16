@@ -3,8 +3,6 @@ import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb'
 import { serve } from '@hono/node-server'
 import { Context, Hono } from 'hono'
-import { getRuntimeKey } from 'hono/adapter'
-import { handle } from 'hono/aws-lambda'
 import { cors } from 'hono/cors'
 import { logger } from 'hono/logger'
 import * as jwt from 'jsonwebtoken'
@@ -73,14 +71,6 @@ async function getUserClaims(c: Context) {
   return {}
 }
 
-let handler
-
-if (getRuntimeKey() === 'node') {
-  serve(app, (info: AddressInfo) => {
-    console.log(`Server listening on port ${info.port}`)
-  })
-} else if (getRuntimeKey() === 'other') {
-  handler = handle(app)
-}
-
-export { handler }
+serve(app, (info: AddressInfo) => {
+  console.log(`Server listening on port ${info.port}`)
+})
