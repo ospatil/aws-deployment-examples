@@ -5,8 +5,10 @@ import {
   StackProps,
   aws_apigateway as apigw,
   aws_dynamodb as dynamodb,
+  aws_iam as iam,
   aws_lambda as lambda,
   aws_lambda_nodejs as lambdaNodejs,
+  aws_logs as logs,
 } from 'aws-cdk-lib'
 import { DynamoDBInsertResource, dynamodbTableName } from 'common-constructs'
 import { Construct } from 'constructs'
@@ -20,6 +22,30 @@ export class LambdaApigwStack extends Stack {
     const apiFn = this.createLambdaFunction()
     dynamodbTable.grantReadData(apiFn)
     const apiGw = this.createApiGateway(apiFn)
+
+    // Create IAM role for API Gateway to assume
+    const apiGatewayRole = new iam.Role(this, 'ApiGatewayRole', {
+      assumedBy: new iam.ServicePrincipal('apigateway.amazonaws.com'),
+    })
+
+    // Attach policy to allow invoking Lambda function
+    apiFn.grantInvoke(apiGatewayRole)
+    // Add condition to Lambda function's execution role
+    const lambdaPolicy = new iam.Policy(this, 'LambdaPolicy')
+    lambdaPolicy.addStatements(
+      new iam.PolicyStatement({
+        actions: ['lambda:InvokeFunction'],
+        resources: [apiFn.functionArn],
+        conditions: {
+          StringEquals: {
+            'aws:SourceArn': `arn:aws:execute-api:${this.region}:${this.account}:${apiGw.restApiId}/*`,
+          },
+        },
+      }),
+    )
+
+    // Attach the policy to the Lambda function's role
+    apiFn.role?.attachInlinePolicy(lambdaPolicy)
 
     const apiGwUrl = new CfnOutput(this, 'apiGwUrl', {
       key: 'apiGatewayUrl',
@@ -48,7 +74,13 @@ export class LambdaApigwStack extends Stack {
       runtime: lambda.Runtime.NODEJS_20_X,
       handler: 'handler',
       entry: path.resolve(process.cwd(), '../backend/src/index.ts'),
-      environment: {},
+      environment: {
+        ENV: 'lambda',
+      },
+      logGroup: new logs.LogGroup(this, 'apiFnLogGroup', {
+        logGroupName: '/aws/lambda/apiFn',
+        removalPolicy: RemovalPolicy.DESTROY,
+      }),
     })
 
     fn.addFunctionUrl({
