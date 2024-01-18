@@ -1,5 +1,5 @@
 {
-  "name": "hello_world",
+  "name": "src",
   "version": "1.0.0",
   "description": "hello world sample for NodeJS",
   "main": "app.js",
@@ -13,10 +13,17 @@
     "test": "npm run compile && npm run unit"
   },
   "dependencies": {
+    "@middy/core": "^5.2.3",
+    "@middy/dynamodb": "^5.2.3",
+    "@middy/http-cors": "^5.2.3",
+    "@middy/http-header-normalizer": "^5.2.3",
+    "@middy/http-router": "^5.2.3",
     "esbuild": "^0.14.14"
   },
   "devDependencies": {
-    "@types/aws-lambda": "^8.10.92",
+    "@aws-sdk/client-dynamodb": "^3.494.0",
+    "@aws-sdk/util-dynamodb": "^3.494.0",
+    "@types/aws-lambda": "^8.10.131",
     "@types/jest": "^29.2.0",
     "@types/node": "^20.5.7",
     "@typescript-eslint/eslint-plugin": "^5.10.2",
